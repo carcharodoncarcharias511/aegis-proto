@@ -228,5 +228,5 @@ service AegisAgent {
   // Agent sends AgentMessage, control plane sends ControlPlaneMessage.
   // mTLS provides authentication at the transport layer.
   // cluster_id in AgentMessage provides application-layer validation.
-  rpc Connect(stream AgentMessage) returns (stream ControlPlaneMessage);
+  rpc OpenStream(stream AgentMessage) returns (stream ControlPlaneMessage);
 }
