@@ -60,7 +60,7 @@ message ControlPlaneMessage {
 // Control plane uses this to register the node and validate cluster_id.
 message Connect {
   string agent_version  = 1;  // semver e.g. "1.0.2"
-  string go_version     = 2;  // runtime info e.g. "go1.25.4" — for Rust: rustc version
+  string runtime_version = 2;  // rustc version e.g. "rustc 1.94.1"
   string os_kernel      = 3;  // e.g. "5.15.0-174-generic"
   int32  cpu_count      = 4;  // number of CPUs on this node
   google.protobuf.Timestamp started_at = 5;  // when this agent instance started
@@ -68,10 +68,21 @@ message Connect {
 
 // Control plane response to Connect.
 // Agent should not send events until it receives this acknowledgement.
+
+enum RejectReason {
+  REJECT_REASON_UNSPECIFIED = 0;
+  CLUSTER_ID_UNKNOWN        = 1;
+  CLUSTER_DECOMMISSIONED    = 2;
+  CLUSTER_LIMIT_REACHED     = 3;
+  LICENSE_EXPIRED           = 4;
+  CERTIFICATE_REVOKED       = 5;
+}
+
 message ConnectAck {
   bool   accepted       = 1;  // false means cluster_id rejected
   string message        = 2;  // human-readable reason if rejected
   string server_version = 3;  // control plane version
+  RejectReason reject_reason = 4;  // structured reason when accepted=false
 }
 
 // Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
@@ -81,6 +92,8 @@ message Heartbeat {
   google.protobuf.Timestamp timestamp    = 1;
   int32                     process_count = 2;  // current tracked process count
   uint64                    uptime_secs  = 3;   // agent uptime in seconds
+  int32                     buffer_used = 4;
+  int32                     buffer_cap  = 5;
 }
 
 
@@ -178,7 +191,8 @@ message ThrottleEvent {
   enum EventType {
     EVENT_TYPE_UNSPECIFIED = 0;
     TREND_CHANGED          = 1;  // Stable→Warning, Warning→Critical, Critical→Stable etc.
-    SNAPSHOT               = 2;  // periodic full throttle state for all pods on this node
+    TREND_RESOLVED         = 2;
+    SNAPSHOT               = 3;  // periodic full throttle state for all pods on this node
   }
 
   EventType                 type        = 1;
@@ -202,6 +216,8 @@ message ConfigUpdate {
   // Throttle thresholds. 0.0 means keep current value.
   double throttle_warning_ratio  = 4;
   double throttle_critical_ratio = 5;
+
+  bool decommissioned = 6;
 }
 
 
