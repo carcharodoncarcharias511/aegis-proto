@@ -1,0 +1,216 @@
+syntax = "proto3";
+
+package aegis.v1;
+
+option go_package = "github.com/yourusername/aegis-proto/aegis/v1;aegisv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Aegis Agent → Control Plane Protocol
+//
+// The agent initiates one bidirectional stream per node.
+// All messages from the agent are wrapped in AgentMessage.
+// All messages from the control plane are wrapped in ControlPlaneMessage.
+//
+// Stream lifecycle:
+//   1. Agent dials control plane (mTLS)
+//   2. Agent sends AgentMessage{connect}
+//   3. Control plane validates cluster_id, registers node
+//   4. Agent sends AgentMessage{snapshot} — full current state
+//   5. Agent sends AgentMessage{event} as things happen
+//   6. Agent sends AgentMessage{heartbeat} every 10 seconds
+//   7. On disconnect: control plane marks node offline after heartbeat timeout
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+// ── Top-level message wrappers ────────────────────────────────────────────
+
+// Every message from agent to control plane is wrapped here.
+// The oneof ensures exactly one payload per message.
+message AgentMessage {
+  // Identifies which node sent this message.
+  // Repeated on every message so the control plane never loses context
+  // even if messages arrive out of order on reconnect.
+  string cluster_id  = 1;
+  string node_name   = 2;
+
+  oneof payload {
+    Connect          connect   = 3;
+    Heartbeat        heartbeat = 4;
+    StateSnapshot    snapshot  = 5;
+    ServiceMapEvent  svc_event = 6;
+    ThrottleEvent    thr_event = 7;
+  }
+}
+
+// Every message from control plane to agent is wrapped here.
+// Reserved for future use — config updates, acknowledged events, etc.
+message ControlPlaneMessage {
+  oneof payload {
+    ConnectAck   connect_ack = 1;
+    ConfigUpdate config      = 2;
+  }
+}
+
+
+// ── Connection lifecycle ──────────────────────────────────────────────────
+
+// First message sent by the agent after the stream is established.
+// Control plane uses this to register the node and validate cluster_id.
+message Connect {
+  string agent_version  = 1;  // semver e.g. "1.0.2"
+  string go_version     = 2;  // runtime info e.g. "go1.25.4" — for Rust: rustc version
+  string os_kernel      = 3;  // e.g. "5.15.0-174-generic"
+  int32  cpu_count      = 4;  // number of CPUs on this node
+  google.protobuf.Timestamp started_at = 5;  // when this agent instance started
+}
+
+// Control plane response to Connect.
+// Agent should not send events until it receives this acknowledgement.
+message ConnectAck {
+  bool   accepted       = 1;  // false means cluster_id rejected
+  string message        = 2;  // human-readable reason if rejected
+  string server_version = 3;  // control plane version
+}
+
+// Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
+// Control plane marks node offline if no heartbeat received within
+// AEGIS_CP_HEARTBEAT_TIMEOUT_SECS (default 30).
+message Heartbeat {
+  google.protobuf.Timestamp timestamp    = 1;
+  int32                     process_count = 2;  // current tracked process count
+  uint64                    uptime_secs  = 3;   // agent uptime in seconds
+}
+
+
+// ── State snapshot ────────────────────────────────────────────────────────
+
+// Full current state pushed on connect and reconnect.
+// Allows the control plane to rebuild its view without loss.
+// The control plane replaces all state for this node on receipt.
+message StateSnapshot {
+  google.protobuf.Timestamp  captured_at   = 1;
+  repeated ServiceEdge       service_map   = 2;
+  repeated PodThrottleState  throttle      = 3;
+  int32                      process_count = 4;
+}
+
+
+// ── Service map ───────────────────────────────────────────────────────────
+
+// A directed edge in the service dependency graph.
+// Represents observed traffic from one Kubernetes entity to another.
+message ServiceEdge {
+  // Source endpoint
+  string src_name        = 1;  // graph name (service name or pod name)
+  string src_namespace   = 2;
+  string src_owner_kind  = 3;  // Deployment, StatefulSet, DaemonSet
+  string src_owner_name  = 4;
+  string src_service_name = 5; // Kubernetes service name if resolved, empty otherwise
+
+  // Destination endpoint
+  string dst_name        = 6;
+  string dst_namespace   = 7;
+  string dst_owner_kind  = 8;
+  string dst_owner_name  = 9;
+  string dst_service_name = 10;
+
+  // Traffic characteristics
+  uint32 dst_port        = 11;
+  uint32 proto           = 12; // 6=TCP, 17=UDP
+  uint64 bytes_total     = 13;
+  uint64 packets_total   = 14;
+
+  // Timestamps
+  google.protobuf.Timestamp first_seen_at = 15;
+  google.protobuf.Timestamp last_seen_at  = 16;
+}
+
+// Incremental service map event — sent as changes happen.
+message ServiceMapEvent {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EDGE_DISCOVERED        = 1;  // new edge seen for the first time
+    EDGE_UPDATED           = 2;  // existing edge has new traffic
+    EDGE_EVICTED           = 3;  // edge stale, removed from graph
+  }
+
+  EventType                 type      = 1;
+  ServiceEdge               edge      = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+}
+
+
+// ── CPU throttle ──────────────────────────────────────────────────────────
+
+// Throttle trend classification — mirrors the agent's internal enum.
+enum ThrottleTrend {
+  THROTTLE_TREND_UNSPECIFIED = 0;
+  STABLE                     = 1;
+  WARNING                    = 2;
+  CRITICAL                   = 3;
+}
+
+// Current throttle state for one pod.
+message PodThrottleState {
+  // Kubernetes identity
+  string pod_name      = 1;
+  string namespace     = 2;
+  string owner_kind    = 3;
+  string owner_name    = 4;
+  string service_name  = 5;  // empty if not behind a service
+
+  // Current state
+  ThrottleTrend trend          = 6;
+  double        throttle_ratio = 7;  // 0.0–1.0, current window ratio
+
+  // Last N window ratios for sparkline display in the iOS app.
+  // Most recent last. Maximum 6 values (matches AEGIS_THROTTLE_WINDOW_COUNT).
+  repeated double window_ratios = 8;
+
+  google.protobuf.Timestamp last_updated_at = 9;
+}
+
+// Incremental throttle event — sent when trend changes.
+// Not sent on every poll — only when something meaningful changes.
+message ThrottleEvent {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    TREND_CHANGED          = 1;  // Stable→Warning, Warning→Critical, Critical→Stable etc.
+    SNAPSHOT               = 2;  // periodic full throttle state for all pods on this node
+  }
+
+  EventType                 type        = 1;
+  PodThrottleState          state       = 2;
+  ThrottleTrend             previous_trend = 3;  // what the trend was before this change
+  google.protobuf.Timestamp occurred_at = 4;
+}
+
+
+// ── Config update (control plane → agent) ────────────────────────────────
+
+// Reserved for future use — allows the control plane to push
+// configuration updates to agents without requiring a restart.
+// Not implemented in v1 agent but defined here for forward compatibility.
+message ConfigUpdate {
+  // Polling intervals (seconds). 0 means keep current value.
+  uint32 throttle_poll_secs      = 1;
+  uint32 flow_poll_secs          = 2;
+  uint32 heartbeat_interval_secs = 3;
+
+  // Throttle thresholds. 0.0 means keep current value.
+  double throttle_warning_ratio  = 4;
+  double throttle_critical_ratio = 5;
+}
+
+
+// ── RPC service definition ────────────────────────────────────────────────
+
+service AegisAgent {
+  // The primary stream. Agent opens this on startup and keeps it open.
+  // Agent sends AgentMessage, control plane sends ControlPlaneMessage.
+  // mTLS provides authentication at the transport layer.
+  // cluster_id in AgentMessage provides application-layer validation.
+  rpc Connect(stream AgentMessage) returns (stream ControlPlaneMessage);
+}
