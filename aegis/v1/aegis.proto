@@ -193,6 +193,7 @@ message ThrottleEvent {
     TREND_CHANGED          = 1;  // Stable→Warning, Warning→Critical, Critical→Stable etc.
     TREND_RESOLVED         = 2;
     SNAPSHOT               = 3;  // periodic full throttle state for all pods on this node
+    POD_GONE               = 4;  // pod's last process exited; evict state
   }
 
   EventType                 type        = 1;
