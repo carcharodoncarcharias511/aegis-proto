@@ -194,6 +194,7 @@ message ThrottleEvent {
     TREND_RESOLVED         = 2;
     SNAPSHOT               = 3;  // periodic full throttle state for all pods on this node
     POD_GONE               = 4;  // pod's last process exited; evict state
+    TREND_UPDATE           = 5;  // periodic state report, no trend change
   }
 
   EventType                 type        = 1;
