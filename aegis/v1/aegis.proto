@@ -64,6 +64,11 @@ message Connect {
   string os_kernel      = 3;  // e.g. "5.15.0-174-generic"
   int32  cpu_count      = 4;  // number of CPUs on this node
   google.protobuf.Timestamp started_at = 5;  // when this agent instance started
+
+  // This cluster's CIDRs, so the CP can tell "peer in another of the
+  // customer's clusters" from "external". Reported once at connect.
+  string pod_cidr = 6;  // e.g. "10.42.0.0/16"
+  string svc_cidr = 7;  // e.g. "10.43.0.0/16"
 }
 
 // Control plane response to Connect.
@@ -138,6 +143,14 @@ message ServiceEdge {
   // Timestamps
   google.protobuf.Timestamp first_seen_at = 15;
   google.protobuf.Timestamp last_seen_at  = 16;
+
+  // Raw peer addressing — set when the destination did not resolve to a
+  // local workload (cross-node, cross-cluster, or external peer). The CP
+  // uses dst_ip to correlate against other nodes'/clusters' pod indexes,
+  // or classify as external by port/proto.
+  string src_ip     = 17;  // dotted IPv4, may be empty when resolved locally
+  string dst_ip     = 18;  // dotted IPv4 of the unresolved peer
+  string flow_class = 19;  // agent label: EAST_WEST, SERVICE, EXT_EGRESS, EXT_INGRESS, HOST_TRAFFIC
 }
 
 // Incremental service map event — sent as changes happen.
@@ -183,6 +196,10 @@ message PodThrottleState {
   repeated double window_ratios = 8;
 
   google.protobuf.Timestamp last_updated_at = 9;
+
+  // Pod IP, so the CP can build a per-cluster IP -> workload index and
+  // resolve peer IPs reported in half-edges (cross-node / cross-cluster).
+  string pod_ip = 10;
 }
 
 // Incremental throttle event — sent when trend changes.
