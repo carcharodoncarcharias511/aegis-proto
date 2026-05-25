@@ -69,6 +69,8 @@ message Connect {
   // customer's clusters" from "external". Reported once at connect.
   string pod_cidr = 6;  // e.g. "10.42.0.0/16"
   string svc_cidr = 7;  // e.g. "10.43.0.0/16"
+  int64  mem_total_bytes = 8;  // total node memory
+  string arch            = 9;  // e.g. "aarch64"
 }
 
 // Control plane response to Connect.
@@ -112,6 +114,7 @@ message StateSnapshot {
   repeated ServiceEdge       service_map   = 2;
   repeated PodThrottleState  throttle      = 3;
   int32                      process_count = 4;
+  repeated string namespaces = 5;  // distinct namespaces observed this cycle
 }
 
 
