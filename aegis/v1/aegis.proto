@@ -41,6 +41,7 @@ message AgentMessage {
     StateSnapshot    snapshot  = 5;
     ServiceMapEvent  svc_event = 6;
     ThrottleEvent    thr_event = 7;
+    ServiceMapBatch  svc_batch = 8;
   }
 }
 
@@ -168,6 +169,13 @@ message ServiceMapEvent {
   EventType                 type      = 1;
   ServiceEdge               edge      = 2;
   google.protobuf.Timestamp occurred_at = 3;
+}
+
+// Batched incremental service-map changes. The agent coalesces one poll
+// interval's edge updates/evictions into a single frame, bounding the message
+// rate at scale to one frame per node per interval rather than one per edge.
+message ServiceMapBatch {
+  repeated ServiceMapEvent events = 1;
 }
 
 
