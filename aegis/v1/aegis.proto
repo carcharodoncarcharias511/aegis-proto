@@ -211,6 +211,8 @@ message PodThrottleState {
   // Pod IP, so the CP can build a per-cluster IP -> workload index and
   // resolve peer IPs reported in half-edges (cross-node / cross-cluster).
   string pod_ip = 10;
+
+  string node_name = 11;   // node where the pod is running
 }
 
 // Incremental throttle event — sent when trend changes.
