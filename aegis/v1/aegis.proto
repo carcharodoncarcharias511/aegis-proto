@@ -42,6 +42,8 @@ message AgentMessage {
     ServiceMapEvent  svc_event = 6;
     ThrottleEvent    thr_event = 7;
     ServiceMapBatch  svc_batch = 8;
+    EndpointAdvertisement  endpoints  = 9;   // A0 primary feed
+    DnsObservation         dns_obs    = 10;  // A0 secondary feed
   }
 }
 
@@ -261,4 +263,62 @@ service AegisAgent {
   // mTLS provides authentication at the transport layer.
   // cluster_id in AgentMessage provides application-layer validation.
   rpc OpenStream(stream AgentMessage) returns (stream ControlPlaneMessage);
+}
+
+// ── Resolution feeds (A0: cross-cluster correlation bedrock) ───────────────
+// The CP joins cross-cluster half-edges by destination identity. Because a
+// cross-cluster source dials a Service VIP / LB / ingress IP — not the dst
+// pod IP — the raw-IP join used for cross-node doesn't carry across clusters.
+// These two feeds let the CP build a fleet-wide IP->identity and name->identity
+// index ahead of time, so an arriving half-edge resolves by lookup.
+
+// PRIMARY feed. The cluster's externally-reachable endpoints mapped to the
+// workload behind them. Low churn (Services/Ingress turn over far less than
+// pods), so sent on-change / low-frequency — NOT in the flow batch.
+message EndpointAdvertisement {
+  google.protobuf.Timestamp captured_at = 1;
+
+  // Full set of this cluster's externally-reachable endpoints this cycle.
+  // The CP treats each advertisement as the authoritative set for the
+  // sending cluster and reconciles (adds new, evicts missing).
+  repeated ServiceEndpoint endpoints = 2;
+}
+
+// One externally-reachable endpoint -> backing workload identity.
+message ServiceEndpoint {
+  // Reachable address a cross-cluster source would dial.
+  string address = 1;   // dotted IPv4: LB ingress IP, ingress host IP, or node IP (NodePort)
+  uint32 port    = 2;   // service / nodePort
+  uint32 proto   = 3;   // 6=TCP, 17=UDP
+
+  EndpointKind kind = 4;
+
+  // Backing workload identity (what the resolved edge dst should become).
+  string service_name = 5;
+  string namespace    = 6;
+  string owner_kind   = 7;  // Deployment, StatefulSet, DaemonSet
+  string owner_name   = 8;
+
+  // DNS name(s) this endpoint is exposed under, when known (ingress host,
+  // service FQDN). Feeds the name index; lets a DnsObservation join here.
+  repeated string dns_names = 9;
+}
+
+enum EndpointKind {
+  ENDPOINT_KIND_UNSPECIFIED = 0;
+  LOAD_BALANCER             = 1;  // Service type=LoadBalancer ingress IP
+  INGRESS                   = 2;  // Ingress host/IP
+  reserved 3;                     // reserved for NODE_PORT
+}
+
+// SECONDARY feed. A DNS resolution observed from a source pod — the name it
+// dialed and the IP it got back. Fills what advertisement can't (name-only /
+// external targets) and confirms intent. Best-effort: absent under DoT/DoH,
+// IP-literal dials, and pre-watch cached connections.
+message DnsObservation {
+  string src_namespace = 1;  // querying pod's namespace
+  string src_pod       = 2;  // querying pod
+  string query_name    = 3;  // name resolved, e.g. "inventory.demo.svc.cluster.local" or an ingress host
+  string resolved_ip   = 4;  // dotted IPv4 the name resolved to
+  google.protobuf.Timestamp observed_at = 5;
 }
