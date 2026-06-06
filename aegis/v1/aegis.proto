@@ -40,7 +40,7 @@ message AgentMessage {
     Heartbeat        heartbeat = 4;
     StateSnapshot    snapshot  = 5;
     ServiceMapEvent  svc_event = 6;
-    ThrottleEvent    thr_event = 7;
+    SignalEvent      sig_event = 7;
     ServiceMapBatch  svc_batch = 8;
     EndpointAdvertisement  endpoints  = 9;   // A0 primary feed
     DnsObservation         dns_obs    = 10;  // A0 secondary feed
@@ -115,7 +115,7 @@ message Heartbeat {
 message StateSnapshot {
   google.protobuf.Timestamp  captured_at   = 1;
   repeated ServiceEdge       service_map   = 2;
-  repeated PodThrottleState  throttle      = 3;
+  repeated PodSignals        signals       = 3;
   int32                      process_count = 4;
   repeated string namespaces = 5;  // distinct namespaces observed this cycle
 }
@@ -183,58 +183,91 @@ message ServiceMapBatch {
 
 // ── CPU throttle ──────────────────────────────────────────────────────────
 
-// Throttle trend classification — mirrors the agent's internal enum.
-enum ThrottleTrend {
-  THROTTLE_TREND_UNSPECIFIED = 0;
-  STABLE                     = 1;
-  WARNING                    = 2;
-  CRITICAL                   = 3;
+// ── Per-pod signals (CPU + memory; network later) ──────────────────────────
+
+// Severity classification — shared by per-signal trends and the synthesized
+// combined pod state.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  STABLE               = 1;
+  WARNING              = 2;
+  CRITICAL             = 3;
 }
 
-// Current throttle state for one pod.
-message PodThrottleState {
+// Which dimension drove the combined state — drives the service-graph glyph.
+enum DominantSignal {
+  DOMINANT_SIGNAL_UNSPECIFIED = 0;
+  DOMINANT_NONE               = 1;  // pod is STABLE
+  DOMINANT_CPU                = 2;
+  DOMINANT_MEMORY             = 3;
+}
+
+// CPU throttle signal for one pod.
+message CpuStats {
+  Severity        trend          = 1;
+  double          throttle_ratio = 2;  // 0.0–1.0, current window ratio
+  // Last N window ratios for sparkline (most recent last, max 6).
+  repeated double window_ratios  = 3;
+}
+
+// Memory signal for one pod. All values read from the pod's cgroup v2 files.
+message MemoryStats {
+  Severity trend = 1;
+
+  // PSI "some avg10": % of time tasks stalled on memory. Headline gauge.
+  double          psi_some_avg10 = 2;
+  // Windowed PSI for sparkline (most recent last), same cadence as cpu window.
+  repeated double psi_window     = 3;
+
+  // Working set vs limit: (memory.current - inactive_file) / memory.max.
+  // ratio < 0 means no limit set (memory.max == "max").
+  double working_set_ratio = 4;
+  uint64 working_set_bytes = 5;  // for display, e.g. "412Mi"
+  uint64 limit_bytes       = 6;  // 0 when unlimited
+
+  uint32 oom_kill_delta = 7;  // memory.events oom_kill, delta since last report
+  double majfault_rate  = 8;  // memory.stat pgmajfault, faults/sec
+}
+
+// Current signal state for one pod — CPU + memory + the synthesized verdict.
+message PodSignals {
   // Kubernetes identity
-  string pod_name      = 1;
-  string namespace     = 2;
-  string owner_kind    = 3;
-  string owner_name    = 4;
-  string service_name  = 5;  // empty if not behind a service
+  string pod_name     = 1;
+  string namespace    = 2;
+  string owner_kind   = 3;
+  string owner_name   = 4;
+  string service_name = 5;  // empty if not behind a service
+  string pod_ip       = 6;
+  string node_name    = 7;
+  google.protobuf.Timestamp last_updated_at = 8;
 
-  // Current state
-  ThrottleTrend trend          = 6;
-  double        throttle_ratio = 7;  // 0.0–1.0, current window ratio
+  // Per-dimension signals.
+  CpuStats    cpu    = 9;
+  MemoryStats memory = 10;
 
-  // Last N window ratios for sparkline display in the iOS app.
-  // Most recent last. Maximum 6 values (matches AEGIS_THROTTLE_WINDOW_COUNT).
-  repeated double window_ratios = 8;
-
-  google.protobuf.Timestamp last_updated_at = 9;
-
-  // Pod IP, so the CP can build a per-cluster IP -> workload index and
-  // resolve peer IPs reported in half-edges (cross-node / cross-cluster).
-  string pod_ip = 10;
-
-  string node_name = 11;   // node where the pod is running
+  // Synthesized state = worst-of(cpu, memory), escalated to CRITICAL when both
+  // are >= WARNING. Drives the pod dot and the service-graph node colour.
+  Severity       state    = 11;
+  DominantSignal dominant = 12;  // which dimension drove `state`
 }
 
-// Incremental throttle event — sent when trend changes.
-// Not sent on every poll — only when something meaningful changes.
-message ThrottleEvent {
+// Incremental signal event — sent on combined-state change, any per-dimension
+// trend change, or as a periodic heartbeat. Replaces ThrottleEvent.
+message SignalEvent {
   enum EventType {
     EVENT_TYPE_UNSPECIFIED = 0;
-    TREND_CHANGED          = 1;  // Stable→Warning, Warning→Critical, Critical→Stable etc.
-    TREND_RESOLVED         = 2;
-    SNAPSHOT               = 3;  // periodic full throttle state for all pods on this node
+    STATE_CHANGED          = 1;  // combined state transitioned
+    STATE_RESOLVED         = 2;  // combined state returned to STABLE
+    SNAPSHOT               = 3;  // periodic full state for all pods on this node
     POD_GONE               = 4;  // pod's last process exited; evict state
-    TREND_UPDATE           = 5;  // periodic state report, no trend change
+    STATE_UPDATE           = 5;  // periodic report, no transition
   }
 
-  EventType                 type        = 1;
-  PodThrottleState          state       = 2;
-  ThrottleTrend             previous_trend = 3;  // what the trend was before this change
-  google.protobuf.Timestamp occurred_at = 4;
+  EventType                 type           = 1;
+  PodSignals                state          = 2;
+  Severity                  previous_state = 3;  // combined state before this event
+  google.protobuf.Timestamp occurred_at    = 4;
 }
-
 
 // ── Config update (control plane → agent) ────────────────────────────────
 
@@ -252,6 +285,12 @@ message ConfigUpdate {
   double throttle_critical_ratio = 5;
 
   bool decommissioned = 6;
+
+  // Memory thresholds (0 = keep current). Forward-compat only in v1.
+  double mem_psi_warning_pct   = 7;
+  double mem_psi_critical_pct  = 8;
+  double mem_ws_warning_ratio  = 9;
+  double mem_ws_critical_ratio = 10;
 }
 
 
