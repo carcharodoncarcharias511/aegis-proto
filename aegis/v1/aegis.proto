@@ -197,9 +197,9 @@ enum Severity {
 // Which dimension drove the combined state — drives the service-graph glyph.
 enum DominantSignal {
   DOMINANT_SIGNAL_UNSPECIFIED = 0;
-  DOMINANT_NONE               = 1;  // pod is STABLE
-  DOMINANT_CPU                = 2;
-  DOMINANT_MEMORY             = 3;
+  DOMINANT_SIGNAL_NONE        = 1;
+  DOMINANT_SIGNAL_CPU         = 2;
+  DOMINANT_SIGNAL_MEMORY      = 3;
 }
 
 // CPU throttle signal for one pod.
