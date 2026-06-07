@@ -42,8 +42,9 @@ message AgentMessage {
     ServiceMapEvent  svc_event = 6;
     SignalEvent      sig_event = 7;
     ServiceMapBatch  svc_batch = 8;
-    EndpointAdvertisement  endpoints  = 9;   // A0 primary feed
-    DnsObservation         dns_obs    = 10;  // A0 secondary feed
+    EndpointAdvertisement  endpoints  = 9;
+    DnsObservation         dns_obs    = 10;
+    WorkloadEvent          wl_event   = 11;
   }
 }
 
@@ -117,7 +118,8 @@ message StateSnapshot {
   repeated ServiceEdge       service_map   = 2;
   repeated PodSignals        signals       = 3;
   int32                      process_count = 4;
-  repeated string namespaces = 5;  // distinct namespaces observed this cycle
+  repeated string         namespaces  = 5;
+  repeated WorkloadStatus workloads   = 6;
 }
 
 
@@ -200,6 +202,8 @@ enum DominantSignal {
   DOMINANT_SIGNAL_NONE        = 1;
   DOMINANT_SIGNAL_CPU         = 2;
   DOMINANT_SIGNAL_MEMORY      = 3;
+  DOMINANT_SIGNAL_AVAILABILITY = 4;
+
 }
 
 // CPU throttle signal for one pod.
@@ -229,6 +233,16 @@ message MemoryStats {
   double majfault_rate  = 8;  // memory.stat pgmajfault, faults/sec
 }
 
+// Availability signal for one pod — sourced from Kubernetes pod/container
+// status, NOT the cgroup. Lets a pod that isn't running (CrashLoop, OOMKilled,
+// NotReady, Pending) report as unhealthy instead of vanishing from the graph.
+message AvailabilityStats {
+  Severity trend         = 1;
+  string   reason        = 2;  // "", "OOMKilled", "CrashLoopBackOff", "NotReady", "Pending", "ImagePullBackOff", "Error"
+  uint32   restart_count = 3;
+  bool     ready         = 4;  // pod's Ready condition
+}
+
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
 message PodSignals {
   // Kubernetes identity
@@ -244,9 +258,12 @@ message PodSignals {
   // Per-dimension signals.
   CpuStats    cpu    = 9;
   MemoryStats memory = 10;
+  AvailabilityStats availability = 13;
 
-  // Synthesized state = worst-of(cpu, memory), escalated to CRITICAL when both
-  // are >= WARNING. Drives the pod dot and the service-graph node colour.
+
+  // Synthesized state = worst-of(cpu, memory, availability), escalated to
+  // CRITICAL when two or more dimensions are >= WARNING. Drives the pod dot and
+  // (with workload capacity) the service-graph node colour.
   Severity       state    = 11;
   DominantSignal dominant = 12;  // which dimension drove `state`
 }
@@ -267,6 +284,32 @@ message SignalEvent {
   PodSignals                state          = 2;
   Severity                  previous_state = 3;  // combined state before this event
   google.protobuf.Timestamp occurred_at    = 4;
+}
+
+// Per-workload capacity — desired vs ready replicas. Authoritative source for
+// "is the service at full strength," independent of how hard individual pods
+// are working. Read from the owning Deployment/StatefulSet/DaemonSet spec+status.
+message WorkloadStatus {
+  string   namespace    = 1;
+  string   name         = 2;  // workload (owner) name
+  string   kind         = 3;  // Deployment, StatefulSet, DaemonSet
+  string   service_name = 4;  // resolved Service, if any — for graph node keying
+  uint32   desired      = 5;
+  uint32   ready        = 6;
+  uint32   available    = 7;
+  Severity availability = 8;  // STABLE when ready==desired; else WARNING/CRITICAL by gap
+}
+
+// Incremental workload-capacity change. Low churn, so sent on-change.
+message WorkloadEvent {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    WORKLOAD_UPDATED       = 1;
+    WORKLOAD_REMOVED       = 2;
+  }
+  EventType                 type        = 1;
+  WorkloadStatus            workload    = 2;
+  google.protobuf.Timestamp occurred_at = 3;
 }
 
 // ── Config update (control plane → agent) ────────────────────────────────
