@@ -231,6 +231,8 @@ message MemoryStats {
 
   uint32 oom_kill_delta = 7;  // memory.events oom_kill, delta since last report
   double majfault_rate  = 8;  // memory.stat pgmajfault, faults/sec
+  // Windowed oom_kill delta, aligned 1:1 with psi_window (most recent last).
+  repeated uint32 oom_window = 9;
 }
 
 // Availability signal for one pod — sourced from Kubernetes pod/container
