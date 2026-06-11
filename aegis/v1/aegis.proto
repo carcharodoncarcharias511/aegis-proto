@@ -245,6 +245,26 @@ message AvailabilityStats {
   bool     ready         = 4;  // pod's Ready condition
 }
 
+enum L4Protocol {
+  L4_PROTOCOL_UNSPECIFIED = 0;
+  TCP  = 1;
+  UDP  = 2;
+  ICMP = 3;
+}
+
+// Network activity for one pod, one protocol. Rates are bytes/sec, computed by
+// the agent from the flow map (deltas ÷ flow poll interval), windowed like
+// cpu/memory. Activity only — no health verdict here.
+message NetworkStats {
+  L4Protocol protocol      = 1;
+  double ingress_bps       = 2;
+  double egress_bps        = 3;
+  double avg_packet_size   = 4;
+  repeated double ingress_window         = 5;
+  repeated double egress_window          = 6;
+  repeated double avg_packet_size_window = 7;
+}
+
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
 message PodSignals {
   // Kubernetes identity
@@ -268,6 +288,7 @@ message PodSignals {
   // (with workload capacity) the service-graph node colour.
   Severity       state    = 11;
   DominantSignal dominant = 12;  // which dimension drove `state`
+  repeated NetworkStats network = 14;
 }
 
 // Incremental signal event — sent on combined-state change, any per-dimension
