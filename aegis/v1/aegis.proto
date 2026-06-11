@@ -212,6 +212,8 @@ message CpuStats {
   double          throttle_ratio = 2;  // 0.0–1.0, current window ratio
   // Last N window ratios for sparkline (most recent last, max 6).
   repeated double window_ratios  = 3;
+  double warning_ratio  = 4;  // agent's WARNING threshold (e.g. 0.10)
+  double critical_ratio = 5;  // agent's CRITICAL threshold (e.g. 0.25)
 }
 
 // Memory signal for one pod. All values read from the pod's cgroup v2 files.
