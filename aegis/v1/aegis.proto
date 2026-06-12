@@ -247,6 +247,12 @@ message AvailabilityStats {
   bool     ready         = 4;  // pod's Ready condition
 }
 
+// Current value plus its co-sampled window (aligned to the CPU/mem window cadence).
+message Trend {
+  double current = 1;
+  repeated double window = 2;
+}
+
 enum L4Protocol {
   L4_PROTOCOL_UNSPECIFIED = 0;
   TCP  = 1;
@@ -265,6 +271,28 @@ message NetworkStats {
   repeated double ingress_window         = 5;
   repeated double egress_window          = 6;
   repeated double avg_packet_size_window = 7;
+
+  // --- Part two: connection health (TCP) ---
+  // Census
+  Trend established_opened       = 8;
+  Trend established_accepted     = 9;
+  Trend in_progress_opened       = 10;
+  Trend in_progress_accepted     = 11;
+  Trend stuck_handshake_opened   = 12;  // outbound dials past timeout = dependency dark
+  Trend stuck_handshake_accepted = 13;  // inbound half-opens past timeout = SYN-flood / failing clients
+
+  // Failure rates (per interval)
+  Trend reset_opened             = 14;  // resets on my outbound = a dependency reset me
+  Trend reset_accepted           = 15;  // resets I sent to inbound clients
+  Trend handshake_fail_opened    = 16;  // my dials that never established
+  Trend handshake_fail_accepted  = 17;
+  Trend graceful_close           = 18;  // context
+
+  // Latency / path health (aggregate)
+  Trend connect_latency_p50_ms   = 19;
+  Trend connect_latency_p99_ms   = 20;
+  Trend srtt_ms                  = 21;
+  Trend retransmit_rate          = 22;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
