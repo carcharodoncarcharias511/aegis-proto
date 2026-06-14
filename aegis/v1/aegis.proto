@@ -293,6 +293,9 @@ message NetworkStats {
   Trend connect_latency_p99_ms   = 20;
   Trend srtt_ms                  = 21;
   Trend retransmit_rate          = 22;
+
+  // --- Part three: network health verdict ---
+  Severity trend = 23;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
