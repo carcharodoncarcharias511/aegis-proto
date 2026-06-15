@@ -296,6 +296,8 @@ message NetworkStats {
 
   // --- Part three: network health verdict ---
   Severity trend = 23;
+
+  Trend accept_rate = 24;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
