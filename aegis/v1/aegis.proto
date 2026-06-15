@@ -298,6 +298,7 @@ message NetworkStats {
   Severity trend = 23;
 
   Trend accept_rate = 24;
+  double throughput_baseline = 25;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
