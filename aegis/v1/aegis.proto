@@ -302,6 +302,21 @@ message NetworkStats {
   double accepted_bps                    = 26;
   double opened_bps                      = 27;
   double accepted_baseline               = 28;
+
+  repeated PerPeerHealth peer_health     = 29;
+}
+
+// Per-downstream opened-side health: this pod's outbound connection failures
+// to ONE specific peer, windowed. Bucketed by destination so the CP can match
+// this pod's view of an edge against that peer's own accepted-side health
+// (cascade/retry cross-reference). Opened side only — accepted side stays
+// pooled in the NetworkStats fields above.
+message PerPeerHealth {
+  string dst_ip                = 1;  // dotted IPv4 of the downstream peer
+  string peer_name             = 2;  // resolved graph name, "" if external/unresolved
+  string peer_namespace        = 3;
+  Trend  reset_opened          = 4;  // outbound resets to this peer, per-sec windowed
+  Trend  handshake_fail_opened = 5;  // outbound dials to this peer that never established
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
