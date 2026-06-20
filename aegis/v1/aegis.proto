@@ -304,6 +304,8 @@ message NetworkStats {
   double accepted_baseline               = 28;
 
   repeated PerPeerHealth peer_health     = 29;
+  repeated double accepted_window        = 30;
+  repeated double opened_window          = 31;
 }
 
 // Per-downstream opened-side health: this pod's outbound connection failures
