@@ -159,6 +159,26 @@ message ServiceEdge {
   string src_ip     = 17;  // dotted IPv4, may be empty when resolved locally
   string dst_ip     = 18;  // dotted IPv4 of the unresolved peer
   string flow_class = 19;  // agent label: EAST_WEST, SERVICE, EXT_EGRESS, EXT_INGRESS, HOST_TRAFFIC
+
+  // ── Two-sided edge health (4.5c) ─────────────────────────────────────────
+  // Each agent contributes the half it can observe for this edge. The SOURCE's
+  // agent fills src_view (its opened-side health dialing dst); the DEST's agent
+  // fills dst_view (its accepted-side health receiving from src). The CP joins
+  // the two half-edges on the canonical (src-identity, dst-identity) pair, so a
+  // rendered edge can carry both. They need NOT agree: both-bad = peer-app
+  // problem; src-bad/dst-fine = path/network problem; both-fine = healthy.
+  EdgeHealthView src_view = 20;  // source's opened-side view of this edge
+  EdgeHealthView dst_view = 21;  // destination's accepted-side view of this edge
+}
+
+// One endpoint's view of an edge's connection health. Failure ratio is the
+// signal: (reset + handshake_fail) / attempt over the window.
+message EdgeHealthView {
+  bool   present        = 1;  // this side was observed (distinguishes "fine" from "unknown")
+  Trend  attempt        = 2;
+  Trend  established     = 3;
+  Trend  reset          = 4;
+  Trend  handshake_fail = 5;
 }
 
 // Incremental service map event — sent as changes happen.
@@ -308,17 +328,30 @@ message NetworkStats {
   repeated double opened_window          = 31;
 }
 
-// Per-downstream opened-side health: this pod's outbound connection failures
-// to ONE specific peer, windowed. Bucketed by destination so the CP can match
-// this pod's view of an edge against that peer's own accepted-side health
-// (cascade/retry cross-reference). Opened side only — accepted side stays
-// pooled in the NetworkStats fields above.
+// Per-peer connection health for ONE direction toward ONE peer. The agent emits
+// these for both directions: opened (peer = a downstream I call) and accepted
+// (peer = a caller of me). dst_ip is the peer's address in both cases (the
+// downstream for opened, the caller for accepted). Identity is resolved to the
+// peer's canonical graph identity + workload type so the CP can join the two
+// half-edges (my opened-side to X, X's accepted-side from me) on (src,dst).
 message PerPeerHealth {
-  string dst_ip                = 1;  // dotted IPv4 of the downstream peer
+  string dst_ip                = 1;  // peer IPv4 (downstream for opened, caller for accepted)
   string peer_name             = 2;  // resolved graph name, "" if external/unresolved
   string peer_namespace        = 3;
-  Trend  reset_opened          = 4;  // outbound resets to this peer, per-sec windowed
-  Trend  handshake_fail_opened = 5;  // outbound dials to this peer that never established
+  // Tags 4,5 retained for wire back-compat with older agents (opened-only).
+  // New agents populate the direction-agnostic fields below instead.
+  Trend  reset_opened          = 4 [deprecated = true];
+  Trend  handshake_fail_opened = 5 [deprecated = true];
+
+  uint32 direction             = 6;  // 0 = opened (I dial peer), 1 = accepted (peer dials me)
+  string peer_type             = 7;  // workload kind: Deployment, StatefulSet, DaemonSet, External
+
+  // Ratio inputs — failure % = (reset + handshake_fail) / attempt. Magnitude
+  // alone is meaningless; the denominator makes "5/5 failing" vs "5/5000" distinct.
+  Trend  attempt               = 8;  // connection attempts to/from this peer, per-sec windowed
+  Trend  established            = 9;  // attempts that reached ESTABLISHED
+  Trend  reset                 = 10; // RST, per-sec windowed
+  Trend  handshake_fail        = 11; // closed before established, per-sec windowed
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
