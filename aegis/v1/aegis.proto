@@ -326,6 +326,11 @@ message NetworkStats {
   repeated PerPeerHealth peer_health     = 29;
   repeated double accepted_window        = 30;
   repeated double opened_window          = 31;
+
+  // Socket-fd exhaustion: rate of EMFILE/ENFILE on socket allocation (per-sec,
+  // windowed). Non-zero = this pod is out of socket file descriptors — the
+  // kernel-level fingerprint of held-connection resource exhaustion.
+  Trend fd_fail                          = 32;
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
