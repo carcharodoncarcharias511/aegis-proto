@@ -357,6 +357,7 @@ message PerPeerHealth {
   Trend  established            = 9;  // attempts that reached ESTABLISHED
   Trend  reset                 = 10; // RST, per-sec windowed
   Trend  handshake_fail        = 11; // closed before established, per-sec windowed
+  Trend established_held = 12;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
