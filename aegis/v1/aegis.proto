@@ -354,10 +354,11 @@ message PerPeerHealth {
   // Ratio inputs — failure % = (reset + handshake_fail) / attempt. Magnitude
   // alone is meaningless; the denominator makes "5/5 failing" vs "5/5000" distinct.
   Trend  attempt               = 8;  // connection attempts to/from this peer, per-sec windowed
-  Trend  established            = 9;  // attempts that reached ESTABLISHED
+  Trend  established           = 9;  // attempts that reached ESTABLISHED
   Trend  reset                 = 10; // RST, per-sec windowed
   Trend  handshake_fail        = 11; // closed before established, per-sec windowed
-  Trend established_held = 12;
+  Trend established_held       = 12;
+  Trend graceful_close         = 13;  // graceful (FIN) closes to/from this peer, per-sec windowed
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
