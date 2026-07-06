@@ -359,6 +359,15 @@ message PerPeerHealth {
   Trend  handshake_fail        = 11; // closed before established, per-sec windowed
   Trend established_held       = 12;
   Trend graceful_close         = 13;  // graceful (FIN) closes to/from this peer, per-sec windowed
+
+  // Per-peer throughput split by DATA direction (not connection direction).
+  // bytes_sent = local→peer, bytes_recv = peer→local, both per-sec windowed.
+  // Together they carry the "sending but nothing coming back" fingerprint of a
+  // hung downstream, and back the merged/directional per-edge throughput view.
+  // The pod-level accepted_bps/opened_bps stay the exact aggregate; these
+  // attribute throughput to the specific edge.
+  Trend bytes_sent             = 14;
+  Trend bytes_recv             = 15;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
