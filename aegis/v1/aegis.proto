@@ -267,6 +267,18 @@ message AvailabilityStats {
   bool     ready         = 4;  // pod's Ready condition
 }
 
+// File-descriptor pressure for one pod — process-wide (sockets AND files),
+// summed over the pod's container pids, divided by the RLIMIT_NOFILE soft
+// ceiling. Not per-protocol. Read from /proc, no eBPF. Utilization = open /
+// ceiling; the agent's warning/critical ratios are carried so the UI can shade
+// zones without an opinionated verdict.
+message FdStats {
+  uint64 open           = 1;  // summed open fds across the pod's pids
+  uint64 ceiling        = 2;  // RLIMIT_NOFILE soft (min across pids); 0 = unknown
+  double warning_ratio  = 3;  // agent WARNING threshold on open/ceiling
+  double critical_ratio = 4;  // agent CRITICAL threshold on open/ceiling
+}
+
 // Current value plus its co-sampled window (aligned to the CPU/mem window cadence).
 message Trend {
   double current = 1;
@@ -394,6 +406,7 @@ message PodSignals {
   Severity       state    = 11;
   DominantSignal dominant = 12;  // which dimension drove `state`
   repeated NetworkStats network = 14;
+  FdStats        fd       = 15;  // process-wide file-descriptor pressure (display)
 }
 
 // Incremental signal event — sent on combined-state change, any per-dimension
