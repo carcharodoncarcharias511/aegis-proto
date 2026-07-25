@@ -352,6 +352,12 @@ message NetworkStats {
   // near 1 means the pod is about to fail fork()/pthread_create() with EAGAIN.
   // 0 when pids.max is unlimited/unknown. Feeds the "is the pod in stress" gate.
   Trend pid_util                         = 33;
+
+  // Ephemeral-port (source-port) exhaustion: per-sec rate of connect()
+  // EADDRNOTAVAIL failures, from the eBPF sys_exit_connect probe. Non-zero means
+  // the pod is out of ephemeral source ports to some destination (TIME_WAIT
+  // pileup / unpooled client). A per-pod (per-netns) resource. Feeds step (a).
+  Trend ephemeral_port_fail              = 34;
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
