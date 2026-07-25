@@ -358,6 +358,13 @@ message NetworkStats {
   // the pod is out of ephemeral source ports to some destination (TIME_WAIT
   // pileup / unpooled client). A per-pod (per-netns) resource. Feeds step (a).
   Trend ephemeral_port_fail              = 34;
+
+  // Raw PID/thread counts for display, reported EVERY poll (unlike pid_util,
+  // which is only meaningful when a limit exists). pid_max = 0 means the cgroup
+  // pids controller is unlimited ("max") — the pod still shows a current count
+  // with "no limit", like memory does.
+  uint64 pid_current                     = 35;  // cgroup pids.current
+  uint64 pid_max                         = 36;  // cgroup pids.max; 0 = unlimited
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
