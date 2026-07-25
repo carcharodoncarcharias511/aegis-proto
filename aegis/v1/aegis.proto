@@ -383,6 +383,16 @@ message PerPeerHealth {
   // attribute throughput to the specific edge.
   Trend bytes_sent             = 14;
   Trend bytes_recv             = 15;
+
+  // Learned per-peer, per-direction throughput baselines (bytes/sec). Computed by
+  // the SAME stable-gated EWMA the pod-level throughput_baseline/accepted_baseline
+  // use, but keyed to THIS peer so "current vs baseline" is measured against the
+  // right resting floor — the pod-level baseline is the wrong granularity for
+  // attributing which edge moved. bytes_sent_baseline pairs with bytes_sent
+  // (local→peer), bytes_recv_baseline with bytes_recv (peer→local). Zero until
+  // enough STABLE samples have been learned for this peer.
+  double bytes_sent_baseline   = 16;
+  double bytes_recv_baseline   = 17;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
