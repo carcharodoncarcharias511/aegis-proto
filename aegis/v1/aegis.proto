@@ -346,6 +346,12 @@ message NetworkStats {
   // windowed). Non-zero = this pod is out of socket file descriptors — the
   // kernel-level fingerprint of held-connection resource exhaustion.
   Trend fd_fail                          = 32;
+
+  // Process/thread (PID) saturation: the pod cgroup's pids.current ÷ pids.max,
+  // windowed (0..1). A finite exhaustible per-pod resource like fd — a value
+  // near 1 means the pod is about to fail fork()/pthread_create() with EAGAIN.
+  // 0 when pids.max is unlimited/unknown. Feeds the "is the pod in stress" gate.
+  Trend pid_util                         = 33;
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
