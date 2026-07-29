@@ -439,6 +439,19 @@ message PodSignals {
   DominantSignal dominant = 12;  // which dimension drove `state`
   repeated NetworkStats network = 14;
   FdStats        fd       = 15;  // process-wide file-descriptor pressure (display)
+
+  // Per-container CPU limits for this pod. Kubernetes limits are a per-container
+  // field (there is no pod-level limit — cpu.limit_millicores above is the sum),
+  // so remediation needs the breakdown to raise the RIGHT container off ITS own
+  // limit. Lets the control plane build the remediation recommendation without
+  // reading the kube API.
+  repeated ContainerCpu containers = 16;
+}
+
+// One container's CPU limit, as set on the pod spec (resources.limits.cpu).
+message ContainerCpu {
+  string name                 = 1;
+  uint32 cpu_limit_millicores = 2;  // 0 = no limit set (nothing to raise)
 }
 
 // Incremental signal event — sent on combined-state change, any per-dimension
@@ -603,16 +616,49 @@ message DnsObservation {
 // Agent -> control plane on the control stream.
 message ControlUp {
   oneof payload {
-    ControlHello       hello       = 1;  // first message after the stream opens
-    DemoCommandResult  demo_result = 2;  // reply to a DemoCommand
+    ControlHello       hello              = 1;  // first message after the stream opens
+    DemoCommandResult  demo_result        = 2;  // reply to a DemoCommand
+    RemediationResult  remediation_result = 3;  // reply to a RemediationCommand
   }
 }
 
 // Control plane -> agent on the control stream.
 message ControlDown {
   oneof payload {
-    DemoCommand demo_command = 1;
+    DemoCommand        demo_command        = 1;
+    RemediationCommand remediation_command = 2;
   }
+}
+
+// An approved remediation to apply in-cluster: raise specific containers' CPU
+// limits. Unlike DemoCommand (one value across a selector), each target names an
+// exact pod+container and its own new limit, so only the throttling containers
+// are touched and each is sized from its own limit.
+message RemediationCommand {
+  string request_id             = 1;   // correlates the RemediationResult
+  string namespace              = 2;
+  repeated ResizeTarget targets = 3;
+}
+
+// One container to resize and the CPU limit to set on it (a Kubernetes quantity,
+// e.g. "350m").
+message ResizeTarget {
+  string pod       = 1;
+  string container = 2;
+  string cpu       = 3;
+}
+
+// Per-target result of a RemediationCommand.
+message RemediationResult {
+  string request_id               = 1;
+  repeated TargetOutcome outcomes = 2;
+}
+
+message TargetOutcome {
+  string pod       = 1;
+  string container = 2;
+  bool   ok        = 3;
+  string detail    = 4;  // applied-limit summary on success, or the error on failure
 }
 
 // First message the agent sends on the control stream so the CP can register
