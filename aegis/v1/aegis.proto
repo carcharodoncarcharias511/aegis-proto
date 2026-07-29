@@ -518,6 +518,16 @@ service AegisAgent {
   // mTLS provides authentication at the transport layer.
   // cluster_id in AgentMessage provides application-layer validation.
   rpc OpenStream(stream AgentMessage) returns (stream ControlPlaneMessage);
+
+  // The control stream. A SECOND agent-initiated bidirectional stream, opened
+  // over the same mTLS connection and kept open alongside OpenStream, dedicated
+  // to control operations (CP -> agent commands, agent -> CP results). Telemetry
+  // and control are kept on separate streams so each can fail, reconnect, and be
+  // reasoned about independently; a future release may split control into its
+  // own service. The agent actuates commands in-cluster with its own
+  // ServiceAccount (the CP holds no kubeconfig), so this works identically
+  // whether the kube API server is on a node or a managed control plane.
+  rpc OpenControlStream(stream ControlUp) returns (stream ControlDown);
 }
 
 // ── Resolution feeds (A0: cross-cluster correlation bedrock) ───────────────
@@ -576,4 +586,84 @@ message DnsObservation {
   string query_name    = 3;  // name resolved, e.g. "inventory.demo.svc.cluster.local" or an ingress host
   string resolved_ip   = 4;  // dotted IPv4 the name resolved to
   google.protobuf.Timestamp observed_at = 5;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Control channel (OpenControlStream)
+//
+// A second agent-initiated bidirectional stream, separate from the telemetry
+// stream, carrying control operations. The agent executes each command against
+// the kube API server using its OWN in-cluster ServiceAccount — the CP holds no
+// kubeconfig and needs no path to the cluster. Today it carries the demo
+// CPU/memory squeeze; remediation and the other controls will ride the same
+// channel later.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Agent -> control plane on the control stream.
+message ControlUp {
+  oneof payload {
+    ControlHello       hello       = 1;  // first message after the stream opens
+    DemoCommandResult  demo_result = 2;  // reply to a DemoCommand
+  }
+}
+
+// Control plane -> agent on the control stream.
+message ControlDown {
+  oneof payload {
+    DemoCommand demo_command = 1;
+  }
+}
+
+// First message the agent sends on the control stream so the CP can register
+// this node's stream in its send registry (keyed customer -> cluster -> node).
+// The customer is taken from the mTLS client-cert OU, as on the telemetry stream.
+message ControlHello {
+  string cluster_id = 1;
+  string node_name  = 2;
+}
+
+// A demo/debug actuation the CP asks the agent to apply in-cluster. The target
+// is one pod, a whole service's pods, or every workload in the namespace
+// (mutually exclusive), optionally narrowed to a single container. The agent
+// resolves the target to live pods/containers and applies the action via the
+// pods/resize subresource.
+message DemoCommand {
+  string request_id = 1;   // correlates the DemoCommandResult
+  string namespace  = 2;
+  string service    = 3;   // set exactly one of service / pod / all
+  string pod        = 4;
+  bool   all        = 5;
+  string container  = 6;   // optional; empty = every container of each pod
+
+  oneof action {
+    CpuLimit cpu = 7;
+    MemLimit mem = 8;
+  }
+}
+
+// Set an absolute CPU limit on each targeted container (a Kubernetes quantity,
+// e.g. "250m").
+message CpuLimit {
+  string cpu = 1;
+}
+
+// Set a memory limit as a percentage of each targeted POD's current working set
+// (>100 = pressure, <100 = OOM). The working sets are supplied by the CP (which
+// aggregates them from all agents' telemetry), so a single agent can size the
+// squeeze for the whole cluster without per-node data. pod_working_set maps pod
+// name -> current working-set bytes; a pod absent from the map is skipped.
+message MemLimit {
+  double pct = 1;
+  map<string, uint64> pod_working_set = 2;
+}
+
+// Result of applying a DemoCommand. updated/skipped are "pod/container" (CPU) or
+// "pod/container=limit" (memory) strings, mirroring the REST response the iOS
+// app already renders. error is set only when the whole command failed.
+message DemoCommandResult {
+  string request_id       = 1;
+  repeated string updated = 2;
+  repeated string skipped = 3;
+  string error            = 4;
 }
