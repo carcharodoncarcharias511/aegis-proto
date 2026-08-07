@@ -169,6 +169,13 @@ message ServiceEdge {
   // problem; src-bad/dst-fine = path/network problem; both-fine = healthy.
   EdgeHealthView src_view = 20;  // source's opened-side view of this edge
   EdgeHealthView dst_view = 21;  // destination's accepted-side view of this edge
+
+  // ── L7 (phase a) ─────────────────────────────────────────────────────────
+  // Optional HTTP metrics for this edge — latency + status-class counts. Set
+  // only when the agent parsed HTTP on the edge; unset = no L7 observed (NOT a
+  // health verdict). The CP merges l7 histograms across agents reporting the
+  // same edge. See L7Stats.
+  L7Stats l7 = 22;
 }
 
 // One endpoint's view of an edge's connection health. Failure ratio is the
@@ -295,6 +302,15 @@ enum L4Protocol {
   ICMP = 3;
 }
 
+// Application-layer protocol the agent parsed on an edge. HTTP1 is all phase-a
+// captures; HTTP2/GRPC are reserved for later (they need HPACK-aware parsing).
+enum L7Protocol {
+  L7_PROTOCOL_UNSPECIFIED = 0;
+  HTTP1 = 1;
+  HTTP2 = 2;  // reserved — not emitted yet
+  GRPC  = 3;  // reserved — not emitted yet
+}
+
 // Network activity for one pod, one protocol. Rates are bytes/sec, computed by
 // the agent from the flow map (deltas ÷ flow poll interval), windowed like
 // cpu/memory. Activity only — no health verdict here.
@@ -367,6 +383,49 @@ message NetworkStats {
   uint64 pid_max                         = 36;  // cgroup pids.max; 0 = unlimited
 }
 
+// ── L7 (application layer) ────────────────────────────────────────────────
+//
+// Optional HTTP metrics for one edge, aggregated over the reporting window.
+// ENTIRELY OPTIONAL at every layer: the agent sets it only when it actually
+// parsed HTTP on the edge (plaintext off the wire in phase a); absence means
+// "no L7 observed", never "healthy" — consumers must render nothing when it is
+// unset and must never fail on its absence.
+//
+// Phase a is per-EDGE only — no per-path/per-operation breakdown (that is
+// phase c, and is what keeps cardinality bounded here). Counts are for the
+// window the parent message covers; the CP sums them across contributing
+// agents/pods for the same logical edge.
+//
+// Latency is carried as a HISTOGRAM, not precomputed percentiles, because
+// percentiles are not summable across contributors — the CP merges buckets
+// from every agent reporting this edge and derives p50/p95/p99 from the merged
+// histogram. latency_bucket_ms[i] counts requests whose response arrived within
+// LATENCY_BUCKETS_MS[i]; the final bucket is the +Inf overflow. Both the agent
+// (fill) and the CP (interpret) MUST use this exact ladder:
+//   LATENCY_BUCKETS_MS = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, +Inf]
+// → 13 buckets. Changing the ladder is a wire-compatible but semantic change:
+// bump it in both consumers together.
+message L7Stats {
+  L7Protocol protocol   = 1;   // HTTP1 in phase a
+
+  uint64 requests       = 2;   // HTTP requests observed on this edge, this window
+  uint64 responses      = 3;   // responses matched to a request (completion visibility)
+
+  // Response status-class counts, this window. A request with no matched
+  // response contributes to `requests` but to none of these (in-flight/dropped).
+  uint64 status_2xx     = 4;
+  uint64 status_3xx     = 5;
+  uint64 status_4xx     = 6;   // client errors
+  uint64 status_5xx     = 7;   // server errors — the headline L7 failure signal
+
+  // Request→response latency histogram (see LATENCY_BUCKETS_MS above), summable.
+  repeated uint64 latency_bucket_ms = 8;
+
+  // Request rate sparkline (req/sec, most recent last), aligned to the same
+  // window cadence as the cpu/mem/network sparklines.
+  repeated double request_window    = 9;
+}
+
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
 // these for both directions: opened (peer = a downstream I call) and accepted
 // (peer = a caller of me). dst_ip is the peer's address in both cases (the
@@ -412,6 +471,11 @@ message PerPeerHealth {
   // enough STABLE samples have been learned for this peer.
   double bytes_sent_baseline   = 16;
   double bytes_recv_baseline   = 17;
+
+  // Optional HTTP metrics for this specific peer edge — backs the L7 view in the
+  // pod-detail network tab. Same optional/graceful contract as ServiceEdge.l7:
+  // set only when HTTP was parsed for this peer, unset otherwise. See L7Stats.
+  L7Stats l7                   = 18;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
