@@ -397,14 +397,12 @@ message NetworkStats {
 // agents/pods for the same logical edge.
 //
 // Latency is carried as a HISTOGRAM, not precomputed percentiles, because
-// percentiles are not summable across contributors — the CP merges buckets
-// from every agent reporting this edge and derives p50/p95/p99 from the merged
-// histogram. latency_bucket_ms[i] counts requests whose response arrived within
-// LATENCY_BUCKETS_MS[i]; the final bucket is the +Inf overflow. Both the agent
-// (fill) and the CP (interpret) MUST use this exact ladder:
-//   LATENCY_BUCKETS_MS = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, +Inf]
-// → 13 buckets. Changing the ladder is a wire-compatible but semantic change:
-// bump it in both consumers together.
+// percentiles are not summable across contributors — the CP merges buckets from
+// every agent reporting this edge and derives p50/p95/p99 from the merged
+// histogram. The buckets are BASE-2 LOG over nanoseconds (see latency_log2_ns),
+// so a fast (µs) edge and a slow (s) edge both get real resolution — there is no
+// hardcoded ladder to be arbitrary at the wrong scale. The CP interpolates
+// within the bucket for the percentile value.
 message L7Stats {
   L7Protocol protocol   = 1;   // HTTP1 in phase a
 
@@ -418,8 +416,13 @@ message L7Stats {
   uint64 status_4xx     = 6;   // client errors
   uint64 status_5xx     = 7;   // server errors — the headline L7 failure signal
 
-  // Request→response latency histogram (see LATENCY_BUCKETS_MS above), summable.
-  repeated uint64 latency_bucket_ms = 8;
+  // Request→response latency histogram, SCALE-INVARIANT: bucket i counts samples
+  // whose latency in nanoseconds has floor(log2(ns)) == i — i.e. latency in
+  // [2^i, 2^(i+1)) ns. Base-2 log buckets so the resolution follows the data at
+  // any scale (µs, ms, s) instead of a fixed ladder, and the CP derives real
+  // percentiles by interpolating WITHIN the bucket (not reporting a bucket edge).
+  // Summable across contributing agents/pods (add bucket-wise). Index 0 = <2ns.
+  repeated uint64 latency_log2_ns = 8;
 
   // Request rate sparkline (req/sec, most recent last), aligned to the same
   // window cadence as the cpu/mem/network sparklines.
