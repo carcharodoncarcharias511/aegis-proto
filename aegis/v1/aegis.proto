@@ -427,6 +427,39 @@ message L7Stats {
   // Request rate sparkline (req/sec, most recent last), aligned to the same
   // window cadence as the cpu/mem/network sparklines.
   repeated double request_window    = 9;
+
+  // Per-HTTP-method breakdown, CALLER (opened) side only — the basis for the
+  // per-operation completion rate (2xx ÷ requests sent) in phase c.1. One entry
+  // per method actually seen on the edge; bounded by the fixed method set. Routes
+  // are aggregated here (c.1); c.2 adds the per-route split. Empty on the accepted
+  // (server) side and when no HTTP was parsed.
+  repeated MethodStat methods       = 10;
+}
+
+// HTTP request method. Bounded set the agent's strict request-line parser
+// recognises; anything else is not counted as a request at all.
+enum HttpMethod {
+  HTTP_METHOD_UNSPECIFIED = 0;
+  HTTP_METHOD_GET         = 1;
+  HTTP_METHOD_POST        = 2;
+  HTTP_METHOD_PUT         = 3;
+  HTTP_METHOD_HEAD        = 4;
+  HTTP_METHOD_DELETE      = 5;
+  HTTP_METHOD_PATCH       = 6;
+  HTTP_METHOD_OPTIONS     = 7;
+}
+
+// One HTTP method's request/response tally on an edge, this window, caller side.
+// responses = status_2xx+3xx+4xx+5xx; a request with no matched response
+// (unanswered = requests − responses) is a non-completion. Completion rate =
+// status_2xx ÷ requests. Per-method latency is deferred to c.2.
+message MethodStat {
+  HttpMethod method  = 1;
+  uint64 requests    = 2;
+  uint64 status_2xx  = 3;
+  uint64 status_3xx  = 4;
+  uint64 status_4xx  = 5;
+  uint64 status_5xx  = 6;
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
