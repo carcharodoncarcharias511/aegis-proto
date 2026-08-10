@@ -460,6 +460,25 @@ message MethodStat {
   uint64 status_3xx  = 4;
   uint64 status_4xx  = 5;
   uint64 status_5xx  = 6;
+
+  // Per-ROUTE breakdown of this method (phase c.2), CALLER side. The agent
+  // templates the path (variable segments → ":id") and strips the query string,
+  // so /abc/123 and /abc/989?x=1 collapse to one route "/abc/:id". Bounded by
+  // top-N + an "other" bucket for the tail (route == "other"). Empty until c.2.
+  repeated RouteStat routes = 7;
+}
+
+// One templated route's request/response tally for a method, this window, caller
+// side. Same completion math as MethodStat (status_2xx ÷ requests), scoped to a
+// single route. route is the templated path ("/inventory/:id"); the tail bucket
+// is the literal "other".
+message RouteStat {
+  string route       = 1;
+  uint64 requests    = 2;
+  uint64 status_2xx  = 3;
+  uint64 status_3xx  = 4;
+  uint64 status_4xx  = 5;
+  uint64 status_5xx  = 6;
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
