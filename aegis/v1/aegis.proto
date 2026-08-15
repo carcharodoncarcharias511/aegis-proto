@@ -571,6 +571,9 @@ message DbOpStat {
 message DbStats {
   DbProtocol protocol = 1;
   repeated DbOpStat ops = 2;
+  // Edge-level operation rate this window (ops/sec), agent-computed like every
+  // other rate — the CP never re-derives rates from counts.
+  double ops_per_sec = 3;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
