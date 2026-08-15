@@ -531,6 +531,46 @@ message PerPeerHealth {
   // pod-detail network tab. Same optional/graceful contract as ServiceEdge.l7:
   // set only when HTTP was parsed for this peer, unset otherwise. See L7Stats.
   L7Stats l7                   = 18;
+
+  // Optional datastore metrics for this specific peer edge — set only when the
+  // peer speaks a recognized DB/cache wire protocol AND that protocol's parsing
+  // is enabled on the agent, unset otherwise. Caller (opened) side only — the
+  // sender view of MY calls to MY datastore, mirroring L7Stats.methods. See
+  // DbStats.
+  DbStats db                   = 19;
+}
+
+// Datastore wire protocols the agent can parse. The contract is deliberately
+// GENERIC: DbStats/DbOpStat carry (protocol, operation string, outcome counts),
+// so supporting a new datastore is a new enum value here plus an agent parser —
+// no schema change, non-breaking in v1. Values are also the unit of per-tenant
+// entitlement (a protocol can be licensed/enabled independently).
+enum DbProtocol {
+  DB_PROTOCOL_UNSPECIFIED = 0;
+  DB_REDIS                = 1;  // RESP (Redis Serialization Protocol)
+  DB_POSTGRES             = 2;  // reserved — not emitted yet
+  DB_MYSQL                = 3;  // reserved — not emitted yet
+  DB_MONGODB              = 4;  // reserved — not emitted yet
+}
+
+// Per-operation datastore tallies for one peer edge, this window — the basis
+// for per-operation completion (ok ÷ requests), caller POV. Operations are the
+// protocol's AGGREGATE verbs (GET, SET, HGET… for Redis; SELECT, INSERT… for
+// SQL later), never individual queries/keys — bounded top-N with the tail
+// summed into "other".
+message DbOpStat {
+  string op       = 1;  // normalized operation name, uppercase; "other" = tail
+  uint64 requests = 2;  // operations sent this window
+  uint64 ok       = 3;  // non-error replies matched (a nil/empty result is ok)
+  uint64 errors   = 4;  // protocol-level error replies (e.g. RESP "-ERR …")
+  uint64 no_reply = 5;  // request whose connection closed before any reply
+}
+
+// Datastore metrics for one peer edge, this window. One protocol per edge (a
+// given peer speaks one wire protocol); repeated ops bounded by top-N + "other".
+message DbStats {
+  DbProtocol protocol = 1;
+  repeated DbOpStat ops = 2;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
