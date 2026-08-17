@@ -789,7 +789,23 @@ message ControlDown {
   oneof payload {
     DemoCommand        demo_command        = 1;
     RemediationCommand remediation_command = 2;
+    EntitlementUpdate  entitlement_update  = 3;
   }
+}
+
+// The tenant's licensed machinery capabilities, pushed by the control plane
+// right after the control stream registers and again whenever the tenant's
+// license changes (upsell, renewal, expiry) — entitlement changes reach the
+// node live, with no agent or CP restart. Capabilities are namespaced feature
+// strings RESOLVED CP-side from the license ("db:redis", "db:*",
+// "transport:*", ...): the agent never re-implements licensing policy, it
+// arms exactly the machinery the set covers (unentitled machinery is never
+// armed — zero kernel cost on the customer's node) and treats its own local
+// configuration as an opt-DOWN within this ceiling. An agent that has never
+// received one (older control plane) behaves as before: local configuration
+// only.
+message EntitlementUpdate {
+  repeated string capabilities = 1;
 }
 
 // An approved remediation to apply in-cluster: raise specific containers' CPU
