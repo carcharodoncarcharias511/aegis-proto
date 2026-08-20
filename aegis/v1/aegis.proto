@@ -494,10 +494,16 @@ message RouteStat {
   uint64 status_4xx  = 5;
   uint64 status_5xx  = 6;
 
-  // Latency of the requests counted above: total and worst, in nanoseconds,
-  // over matched request→response pairs only (a request with no response
-  // contributes to `requests` but to neither of these). Mean = lat_sum_ns
-  // divided by the matched count; both are summable across agents.
+  // Latency over matched request→response pairs only (a request with no
+  // response contributes to `requests` but to neither of these), nanoseconds.
+  //
+  // lat_sum_ns is WINDOWED like every other counter here, so mean =
+  // lat_sum_ns ÷ matched-count is this window's mean and is summable across
+  // agents. lat_max_ns is CUMULATIVE — the worst round trip seen on this route
+  // since the agent first saw the edge, not a per-window maximum. A windowed
+  // max cannot be derived by subtraction, and resetting the kernel counter
+  // from userspace would race the data path for a statistic that is only a
+  // bimodality hint; the mean is the number that drives comparison.
   //
   // Deliberately NOT a histogram. A single route sees a small fraction of its
   // edge's traffic — often a handful of samples per window — where a percentile
@@ -593,11 +599,12 @@ message DbOpStat {
   uint64 errors   = 4;  // protocol-level error replies (e.g. RESP "-ERR …")
   uint64 no_reply = 5;  // request whose connection closed before any reply
 
-  // Query latency: total and worst, in nanoseconds, over replies actually
-  // matched to their request (ok + errors; never no_reply). Mean = lat_sum_ns
-  // divided by that matched count. Same reasoning as RouteStat: two counters
-  // rather than a histogram, because the question at operation level is which
-  // query is slow, not the tail shape of one query.
+  // Query latency over replies actually matched to their request (ok + errors;
+  // never no_reply), nanoseconds. Same shape and caveat as RouteStat:
+  // lat_sum_ns is windowed (mean = sum ÷ matched count), lat_max_ns is the
+  // cumulative worst since the edge was first seen. Counters rather than a
+  // histogram because the question at operation level is which query is slow,
+  // not the tail shape of one query.
   //
   // Measured from the request write to its matched reply, so it is the
   // client-observed round trip — network plus server time — which is what the
