@@ -428,6 +428,20 @@ message L7Stats {
   // window cadence as the cpu/mem/network sparklines.
   repeated double request_window    = 9;
 
+  // Exponent of bucket 0 in latency_log2_ns, so the histogram DESCRIBES ITS OWN
+  // scale instead of relying on both ends agreeing a constant. bucket i counts
+  // latency in [2^(floor+i), 2^(floor+i+1)) ns.
+  //
+  // 0 (or absent, from an agent predating this field) = the original ladder
+  // starting at 1ns. Agents that drop the sub-microsecond buckets — no HTTP or
+  // datastore round trip can complete in under 1µs, so those ten buckets never
+  // received a sample — send floor=10, making bucket 0 "<=1µs".
+  //
+  // Explicit rather than implied because a rolling agent upgrade has both
+  // versions reporting at once, and a silently mis-scaled histogram is off by
+  // 1024x — the kind of error that poisons an analytics/ML store invisibly.
+  uint32 latency_log2_floor = 11;
+
   // Per-HTTP-method breakdown, CALLER (opened) side only — the basis for the
   // per-operation completion rate (2xx ÷ requests sent) in phase c.1. One entry
   // per method actually seen on the edge; bounded by the fixed method set. Routes
@@ -479,6 +493,20 @@ message RouteStat {
   uint64 status_3xx  = 4;
   uint64 status_4xx  = 5;
   uint64 status_5xx  = 6;
+
+  // Latency of the requests counted above: total and worst, in nanoseconds,
+  // over matched request→response pairs only (a request with no response
+  // contributes to `requests` but to neither of these). Mean = lat_sum_ns
+  // divided by the matched count; both are summable across agents.
+  //
+  // Deliberately NOT a histogram. A single route sees a small fraction of its
+  // edge's traffic — often a handful of samples per window — where a percentile
+  // is indistinguishable from the maximum, and a per-route histogram would cost
+  // ~5MiB of preallocated kernel memory to say what 16 bytes says here. The
+  // edge keeps the full histogram, where sample counts make percentiles real;
+  // these answer the different question "WHICH call on that edge is slow".
+  uint64 lat_sum_ns  = 7;
+  uint64 lat_max_ns  = 8;
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
@@ -564,6 +592,18 @@ message DbOpStat {
   uint64 ok       = 3;  // non-error replies matched (a nil/empty result is ok)
   uint64 errors   = 4;  // protocol-level error replies (e.g. RESP "-ERR …")
   uint64 no_reply = 5;  // request whose connection closed before any reply
+
+  // Query latency: total and worst, in nanoseconds, over replies actually
+  // matched to their request (ok + errors; never no_reply). Mean = lat_sum_ns
+  // divided by that matched count. Same reasoning as RouteStat: two counters
+  // rather than a histogram, because the question at operation level is which
+  // query is slow, not the tail shape of one query.
+  //
+  // Measured from the request write to its matched reply, so it is the
+  // client-observed round trip — network plus server time — which is what the
+  // calling pod actually waits on.
+  uint64 lat_sum_ns = 6;
+  uint64 lat_max_ns = 7;
 }
 
 // Datastore metrics for one peer edge, this window. One protocol per edge (a
