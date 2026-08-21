@@ -381,6 +381,29 @@ message NetworkStats {
   // with "no limit", like memory does.
   uint64 pid_current                     = 35;  // cgroup pids.current
   uint64 pid_max                         = 36;  // cgroup pids.max; 0 = unlimited
+
+  // RST initiator split. reset_opened (14) / reset_accepted (15) remain the
+  // TOTALS (an RST seen on the connection, whichever end sent it); these carry
+  // the SELF-initiated subset (peer-initiated = total − self). The split is
+  // what separates wait-shaped from failure-shaped trouble on the accepted
+  // side: callers resetting connections INTO me = callers giving up on a slow
+  // server (SLOW_SERVING evidence); me resetting my accepted connections = I
+  // am failing my callers (INTERNAL_FAULT evidence). Opened side mirrors it:
+  // me resetting my own dials = my client timeout abandoned a slow downstream.
+  Trend reset_opened_self                = 37;  // RSTs I sent on connections I dialed
+  Trend reset_accepted_self              = 38;  // RSTs I sent on connections I accepted
+
+  // Wait-shaped serving signal: request→response latency this pod serves on
+  // its ACCEPTED (inbound) HTTP edges, pooled across callers, with an
+  // agent-learned stable-gated baseline (same EWMA statistic as the throughput
+  // baselines; learned only while the pod is STABLE and actually serving, so
+  // the anomaly it is meant to expose can never drag it up). This is the
+  // signal that lets a slow-but-succeeding server promote to stress while its
+  // resources sit at baseline and no caller has failed yet. baseline 0 =
+  // unseeded — consumers must treat the ratio as unjudgeable, never as fine.
+  Trend  serve_latency_ms                = 39;  // windowed p50 serving latency, ms
+  double serve_latency_baseline_ms       = 40;  // stable-gated EWMA baseline; 0 = unseeded
+  Trend  serve_request_rate              = 41;  // matched request→response pairs per second
 }
 
 // ── L7 (application layer) ────────────────────────────────────────────────
