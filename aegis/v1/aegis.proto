@@ -520,13 +520,14 @@ message RouteStat {
   // Latency over matched request→response pairs only (a request with no
   // response contributes to `requests` but to neither of these), nanoseconds.
   //
-  // lat_sum_ns is WINDOWED like every other counter here, so mean =
-  // lat_sum_ns ÷ matched-count is this window's mean and is summable across
-  // agents. lat_max_ns is CUMULATIVE — the worst round trip seen on this route
-  // since the agent first saw the edge, not a per-window maximum. A windowed
-  // max cannot be derived by subtraction, and resetting the kernel counter
-  // from userspace would race the data path for a statistic that is only a
-  // bimodality hint; the mean is the number that drives comparison.
+  // lat_sum_ns is WINDOWED, so mean = lat_sum_ns ÷ matched-count is this
+  // window's mean and is summable across agents. lat_max_ns is now the
+  // WINDOWED worst — the slowest matched round trip THIS window (reset each
+  // emit), not a lifetime maximum. It is maintained in a dedicated per-op max
+  // map that userspace reads-and-clears each poll, so windowing it never races
+  // the shared counters (the max sits alone; clearing it cannot lose a sibling
+  // increment). The worst-in-window is what surfaces a slow query the mean
+  // dilutes when only some calls of an operation are slow.
   //
   // Deliberately NOT a histogram. A single route sees a small fraction of its
   // edge's traffic — often a handful of samples per window — where a percentile
@@ -536,6 +537,14 @@ message RouteStat {
   // these answer the different question "WHICH call on that edge is slow".
   uint64 lat_sum_ns  = 7;
   uint64 lat_max_ns  = 8;
+
+  // Outstanding requests: sent but not yet answered at emit — a LEVEL (current
+  // count), NOT a windowed delta. The agent computes it from its cumulative
+  // per-route counters (requests − responses) at emit; it cannot be derived
+  // downstream from the windowed counts above (requests≈responses in steady
+  // state would hide a standing backlog). A request-accurate serving-backlog
+  // gauge, immune to connection reuse. 0 = none / not measured.
+  uint64 in_flight   = 9;
 }
 
 // Per-peer connection health for ONE direction toward ONE peer. The agent emits
@@ -623,17 +632,27 @@ message DbOpStat {
   uint64 no_reply = 5;  // request whose connection closed before any reply
 
   // Query latency over replies actually matched to their request (ok + errors;
-  // never no_reply), nanoseconds. Same shape and caveat as RouteStat:
-  // lat_sum_ns is windowed (mean = sum ÷ matched count), lat_max_ns is the
-  // cumulative worst since the edge was first seen. Counters rather than a
-  // histogram because the question at operation level is which query is slow,
-  // not the tail shape of one query.
+  // never no_reply), nanoseconds. Same shape as RouteStat: lat_sum_ns is
+  // windowed (mean = sum ÷ matched count), and lat_max_ns is the WINDOWED worst
+  // — the slowest matched query THIS window (reset each emit via a dedicated
+  // per-op max map that userspace reads-and-clears, so it never races the
+  // shared counters). Counters rather than a histogram because the question at
+  // operation level is which query is slow, not the tail shape of one query.
   //
   // Measured from the request write to its matched reply, so it is the
   // client-observed round trip — network plus server time — which is what the
   // calling pod actually waits on.
   uint64 lat_sum_ns = 6;
   uint64 lat_max_ns = 7;
+
+  // Outstanding queries: sent but not yet answered at emit — a LEVEL (current
+  // count), NOT a windowed delta. The agent computes it from its cumulative
+  // per-op counters (requests − ok − errors − no_reply) at emit; it cannot be
+  // derived downstream from the windowed counts above. A request-accurate
+  // backlog gauge, immune to connection pooling — it makes a held/slow query
+  // visible the instant it stalls, without waiting for it to complete. 0 =
+  // none / not measured.
+  uint64 in_flight = 8;
 }
 
 // Datastore metrics for one peer edge, this window. One protocol per edge (a
