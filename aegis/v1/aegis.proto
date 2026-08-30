@@ -96,6 +96,24 @@ message ConnectAck {
   RejectReason reject_reason = 4;  // structured reason when accepted=false
 }
 
+// Per-map capacity telemetry for the agent's eBPF maps. Additive to Heartbeat
+// (field 6) — non-breaking on v1. Reported ONLY for maps worth surfacing (at or
+// near capacity, or dropping), so a healthy heartbeat carries an empty list and
+// stays frugal on the wire. The control plane diffs `dropped` across heartbeats
+// for a rate and flags a node whose agent is losing visibility.
+message MapStat {
+  string name      = 1;  // map name, e.g. "FLOWS", "CONN_STATE", "L7_CONN"
+  uint32 kind      = 2;  // 0 = plain (a new entry is DROPPED when full)
+                         // 1 = LRU  (the OLDEST entry is evicted when full)
+  uint64 capacity  = 3;  // max_entries (the fixed size)
+  uint64 occupancy = 4;  // entries currently live (sampled)
+  uint64 dropped   = 5;  // CUMULATIVE failed inserts since agent start (plain maps only)
+}
+
+message AgentTelemetry {
+  repeated MapStat maps = 1;  // maps at/near capacity or dropping; empty when all healthy
+}
+
 // Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
 // Control plane marks node offline if no heartbeat received within
 // AEGIS_CP_HEARTBEAT_TIMEOUT_SECS (default 30).
@@ -105,6 +123,7 @@ message Heartbeat {
   uint64                    uptime_secs  = 3;   // agent uptime in seconds
   int32                     buffer_used = 4;
   int32                     buffer_cap  = 5;
+  AgentTelemetry            telemetry   = 6;  // eBPF-map capacity health (additive, non-breaking)
 }
 
 
