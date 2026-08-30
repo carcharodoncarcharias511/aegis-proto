@@ -108,10 +108,12 @@ message MapStat {
   uint64 capacity  = 3;  // max_entries (the fixed size)
   uint64 occupancy = 4;  // entries currently live (sampled)
   uint64 dropped   = 5;  // CUMULATIVE failed inserts since agent start (plain maps only)
+  uint64 evicted   = 6;  // CUMULATIVE LRU eviction estimate (admissions while full);
+                         // LRU maps only, 0 for plain maps. See MAP_ADMITS in the agent.
 }
 
 message AgentTelemetry {
-  repeated MapStat maps = 1;  // maps at/near capacity or dropping; empty when all healthy
+  repeated MapStat maps = 1;  // every eBPF map's capacity stats (full list, healthy included)
 }
 
 // Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
