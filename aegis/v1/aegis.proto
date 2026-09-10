@@ -197,6 +197,13 @@ message ServiceEdge {
   // health verdict). The CP merges l7 histograms across agents reporting the
   // same edge. See L7Stats.
   L7Stats l7 = 22;
+
+  // ── Message queue (SQS / Pub-Sub) ────────────────────────────────────────
+  // Set when the agent parsed broker traffic on this edge (dst = broker
+  // endpoint). Carries a per-queue breakdown; the CP explodes it into synthetic
+  // per-queue nodes and producer/consumer edges, replacing the raw endpoint edge
+  // in the graph. Unset = no broker traffic observed. See MqStats.
+  MqStats mq = 23;
 }
 
 // One endpoint's view of an edge's connection health. Failure ratio is the
@@ -625,6 +632,14 @@ message PerPeerHealth {
   // sender view of MY calls to MY datastore, mirroring L7Stats.methods. See
   // DbStats.
   DbStats db                   = 19;
+
+  // Optional message-queue metrics for this peer edge — set only when the peer is
+  // a broker endpoint the agent parsed broker traffic to (SQS/Pub-Sub), unset
+  // otherwise. Caller (opened) side only — the pod OPENS to the broker for both
+  // produce and consume. One broker endpoint carries many queues, so this holds
+  // the per-queue breakdown; the CP explodes it into per-queue graph nodes. See
+  // MqStats. (Same unset-when-absent contract as l7/db.)
+  MqStats mq                   = 20;
 }
 
 // Datastore wire protocols the agent can parse. The contract is deliberately
@@ -684,6 +699,63 @@ message DbStats {
   // Edge-level operation rate this window (ops/sec), agent-computed like every
   // other rate — the CP never re-derives rates from counts.
   double ops_per_sec = 3;
+}
+
+// ── Message queue / broker (SQS, Pub/Sub, …) ────────────────────────────────
+// A broker has NO direct producer→consumer socket: a producer and a consumer
+// each open their OWN connection to the broker endpoint (e.g. sqs.<region>.
+// amazonaws.com), and MANY queues collapse onto that one endpoint (same dst
+// IP:443). So the agent reports, per endpoint edge, a per-QUEUE breakdown, and
+// the CP synthesizes a per-queue graph node from (system, endpoint, queue),
+// drawing a producer edge (pod → queue) or consumer edge (queue → pod) per the
+// ops' MqOpKind. Detection + queue name come from the request head/body in
+// userspace (Host / X-Amz-Target / QueueUrl / Pub-Sub URL path), TLS or not.
+enum MqSystem {
+  MQ_SYSTEM_UNSPECIFIED = 0;
+  MQ_SQS                = 1;  // AWS SQS
+  MQ_PUBSUB             = 2;  // GCP Pub/Sub
+  // MQ_KAFKA, MQ_RABBITMQ later
+}
+
+// Orientation of an operation, so the CP can point the edge without hardcoding
+// per-system op names. The agent classifies from the op it parsed.
+enum MqOpKind {
+  MQ_OP_KIND_UNSPECIFIED = 0;
+  MQ_PRODUCE             = 1;  // SendMessage / publish
+  MQ_CONSUME             = 2;  // ReceiveMessage / pull
+  MQ_ADMIN               = 3;  // DeleteMessage, ack, GetQueueAttributes, …
+}
+
+// Per-operation tallies within one queue, this window. Same outcome + latency
+// shape as DbOpStat: client-observed round trip (request write → matched reply),
+// windowed lat_sum (mean = sum ÷ matched) + WINDOWED lat_max, and in_flight as a
+// current LEVEL (requests − ok − errors − no_reply). Bounded top-N + "other".
+message MqOpStat {
+  string   op         = 1;  // API action verbatim: SendMessage, ReceiveMessage, publish, pull…
+  MqOpKind kind       = 2;  // produce / consume / admin — orients the edge
+  uint64   requests   = 3;
+  uint64   ok         = 4;
+  uint64   errors     = 5;
+  uint64   no_reply   = 6;
+  uint64   lat_sum_ns = 7;
+  uint64   lat_max_ns = 8;
+  uint64   in_flight  = 9;
+}
+
+// Metrics for one broker queue/topic this pod talked to, this window. The CP
+// keys a synthetic graph node on (system, endpoint, queue).
+message MqQueueStat {
+  MqSystem          system      = 1;
+  string            queue       = 2;  // SQS queue name / Pub-Sub topic or subscription (last URL path segment)
+  string            endpoint    = 3;  // broker host, e.g. sqs.us-east-1.amazonaws.com (region/broker identity)
+  repeated MqOpStat ops         = 4;  // bounded top-N + "other"
+  double            ops_per_sec = 5;  // agent-computed rate for this queue, this window
+}
+
+// Message-queue metrics for one peer edge (pod → broker endpoint), this window.
+// One endpoint edge carries MANY queues, so this is repeated per queue.
+message MqStats {
+  repeated MqQueueStat queues = 1;
 }
 
 // Current signal state for one pod — CPU + memory + the synthesized verdict.
