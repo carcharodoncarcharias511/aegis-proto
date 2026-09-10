@@ -769,6 +769,10 @@ message PodSignals {
   string pod_ip       = 6;
   string node_name    = 7;
   google.protobuf.Timestamp last_updated_at = 8;
+  // Detected process runtime/language ("go", "nodejs", "python", …) for the
+  // per-service language badge in the app's graph. "" when undetected. Agent
+  // fills it from the pod's process (interpreter comm, or Go's .gopclntab).
+  string runtime = 17;
 
   // Per-dimension signals.
   CpuStats    cpu    = 9;
