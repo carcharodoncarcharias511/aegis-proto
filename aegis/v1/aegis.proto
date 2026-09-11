@@ -774,6 +774,14 @@ message PodSignals {
   // fills it from the pod's process (interpreter comm, or Go's .gopclntab).
   string runtime = 17;
 
+  // True when the pod's container image is "hardened" — a distroless/minimal
+  // rootfs with no shell or package manager. Agent detects it by the absence of
+  // a shell binary in the container's mount namespace (/proc/<pid>/root/bin/sh
+  // and the usual shell paths). Drives a lock glyph on the graph node, distinct
+  // from the language badge. false when a shell is present or the process's
+  // rootfs could not be inspected.
+  bool hardened = 18;
+
   // Per-dimension signals.
   CpuStats    cpu    = 9;
   MemoryStats memory = 10;
