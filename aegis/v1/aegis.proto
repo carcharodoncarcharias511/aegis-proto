@@ -742,14 +742,28 @@ message MqOpStat {
   uint64   in_flight  = 9;
 }
 
+// One message's broker-NATIVE id observed produced or consumed on this pod, with
+// the wall-clock time it was seen. The CP joins the produce marker and the consume
+// marker carrying the SAME (system, endpoint, queue, msg_id) — emitted by DIFFERENT
+// pods/agents — into queue dwell (enqueue → pickup): dwell = consume_ts - produce_ts.
+// msg_id is always the platform's own identifier (SQS MessageId, Kafka
+// partition:offset, RabbitMQ message-id, Redis Stream entry id), never a synthesized
+// key. Bounded/sampled per queue per window so the wire stays frugal.
+message MqMsgMarker {
+  string   msg_id = 1;  // broker-native per-message id, verbatim
+  MqOpKind kind   = 2;  // MQ_PRODUCE → ts is the send time; MQ_CONSUME → ts is the receive time
+  uint64   ts_ns  = 3;  // wall-clock (CLOCK_REALTIME) ns, so it compares across nodes
+}
+
 // Metrics for one broker queue/topic this pod talked to, this window. The CP
 // keys a synthetic graph node on (system, endpoint, queue).
 message MqQueueStat {
-  MqSystem          system      = 1;
-  string            queue       = 2;  // SQS queue name / Pub-Sub topic or subscription (last URL path segment)
-  string            endpoint    = 3;  // broker host, e.g. sqs.us-east-1.amazonaws.com (region/broker identity)
-  repeated MqOpStat ops         = 4;  // bounded top-N + "other"
-  double            ops_per_sec = 5;  // agent-computed rate for this queue, this window
+  MqSystem            system      = 1;
+  string              queue       = 2;  // SQS queue name / Pub-Sub topic or subscription (last URL path segment)
+  string              endpoint    = 3;  // broker host, e.g. sqs.us-east-1.amazonaws.com (region/broker identity)
+  repeated MqOpStat   ops         = 4;  // bounded top-N + "other"
+  double              ops_per_sec = 5;  // agent-computed rate for this queue, this window
+  repeated MqMsgMarker markers    = 6;  // bounded produce/consume id samples for CP-side dwell join
 }
 
 // Message-queue metrics for one peer edge (pod → broker endpoint), this window.
