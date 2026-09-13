@@ -969,13 +969,12 @@ message DnsObservation {
   string query_name    = 3;  // name resolved, e.g. "inventory.demo.svc.cluster.local" or an ingress host
   string resolved_ip   = 4;  // dotted IPv4 the name resolved to
   google.protobuf.Timestamp observed_at = 5;
-  // Policy-scoped endpoint identification (cloud-agnostic). The agent emits an
-  // observation only when query_name matches an enabled policy; service_class is
-  // that policy's label ("sqs", "pubsub", "rds", …), so the CP can classify the
-  // resolved_ip as known infra without any cloud API. ttl_secs is the DNS record
-  // TTL, so the CP decays the ip→identity mapping instead of trusting it forever.
-  uint32 ttl_secs      = 6;
-  string service_class = 7;  // policy label, e.g. "sqs"; "" = name-index feed only
+  // NOTE: fields 6/7 (ttl_secs, service_class) were briefly used by an early
+  // CP-consumed DNS-suppression design that was replaced by agent-side,
+  // connection-scoped suppression (the agent drops broker edges at source; the CP
+  // has no DNS role). Reserved so the numbers aren't reused with other meaning.
+  reserved 6, 7;
+  reserved "ttl_secs", "service_class";
 }
 
 
