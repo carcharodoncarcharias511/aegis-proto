@@ -691,6 +691,38 @@ message DbOpStat {
   uint64 in_flight = 8;
 }
 
+// Connection-pool health for one datastore edge, this window. Observed on the
+// WIRE (TCP connection lifecycle + in-flight query state) — NOT the app's
+// configured pool maximum, which is client-library config (HikariCP
+// maximumPoolSize, pgx MaxConns, DB max_connections) that never crosses the wire
+// and is deliberately not modelled here. Answers, for pool/pod dimensioning:
+// how many connections are open and busy, the peaks reached, and whether new
+// connections keep succeeding as concurrency climbs under load.
+message DbConnHealth {
+  // LEVELS at emit (current count), like DbOpStat.in_flight — not windowed
+  // deltas, and not derivable downstream from the windowed counts.
+  uint32 open   = 1;  // established connections to this peer right now
+  uint32 in_use = 2;  // of `open`, those with a query in flight right now
+                      // (idle = open − in_use, derived downstream)
+
+  // WINDOWED high-water marks, reset each emit — the peaks reached THIS window.
+  // in_use_peak ≈ the smallest pool that would not have made a caller wait, so
+  // it is the number to size to; open_peak is the connection ceiling observed.
+  uint32 open_peak    = 3;
+  uint32 in_use_peak  = 4;
+
+  // WINDOWED connection-lifecycle counts (this window). success% = succeeded ÷
+  // attempts, derived downstream. From the same per-peer PeerCounters that feed
+  // the connection-failure edge signal.
+  uint64 attempts  = 5;  // connection attempts to this peer
+  uint64 succeeded = 6;  // attempts that reached ESTABLISHED
+  uint64 failed    = 7;  // reset + handshake-fail (never established / dropped)
+
+  // New-connection rate (established/sec), agent-computed like every other rate.
+  // A churn signal: high under load = pool thrash (too small / misconfigured).
+  double new_per_sec = 8;
+}
+
 // Datastore metrics for one peer edge, this window. One protocol per edge (a
 // given peer speaks one wire protocol); repeated ops bounded by top-N + "other".
 message DbStats {
@@ -699,6 +731,9 @@ message DbStats {
   // Edge-level operation rate this window (ops/sec), agent-computed like every
   // other rate — the CP never re-derives rates from counts.
   double ops_per_sec = 3;
+  // Connection-pool health for this edge (open/in-use, peaks, attempt/success/
+  // fail, churn). Absent when the agent reports no connection data for the edge.
+  DbConnHealth conn = 4;
 }
 
 // ── Message queue / broker (SQS, Pub/Sub, …) ────────────────────────────────
