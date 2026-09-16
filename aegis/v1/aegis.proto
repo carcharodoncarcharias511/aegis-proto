@@ -105,9 +105,12 @@ message MapStat {
   string name      = 1;  // map name, e.g. "FLOWS", "CONN_STATE", "L7_CONN"
   uint32 kind      = 2;  // 0 = plain (a new entry is DROPPED when full)
                          // 1 = LRU  (the OLDEST entry is evicted when full)
-  uint64 capacity  = 3;  // max_entries (the fixed size)
-  uint64 occupancy = 4;  // entries currently live (sampled)
-  uint64 dropped   = 5;  // CUMULATIVE failed inserts since agent start (plain maps only)
+                         // 2 = perf RING (a streaming buffer, e.g. L7_CAPTURE /
+                         //     DNS_CAPTURE / process events): NO capacity/occupancy;
+                         //     `dropped` = events lost when userspace can't drain it.
+  uint64 capacity  = 3;  // max_entries (fixed size); 0 for a ring (kind 2)
+  uint64 occupancy = 4;  // entries currently live (sampled); 0 for a ring (kind 2)
+  uint64 dropped   = 5;  // CUMULATIVE failed inserts (plain maps) / events lost (rings)
   uint64 evicted   = 6;  // CUMULATIVE LRU eviction estimate (admissions while full);
                          // LRU maps only, 0 for plain maps. See MAP_ADMITS in the agent.
 }
