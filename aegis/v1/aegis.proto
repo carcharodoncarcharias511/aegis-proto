@@ -113,6 +113,12 @@ message MapStat {
   uint64 dropped   = 5;  // CUMULATIVE failed inserts (plain maps) / events lost (rings)
   uint64 evicted   = 6;  // CUMULATIVE LRU eviction estimate (admissions while full);
                          // LRU maps only, 0 for plain maps. See MAP_ADMITS in the agent.
+  uint64 dropped_window = 7; // drops in the LAST report window (per-window rate), so the
+                             // UI shows CURRENT loss instead of the lifetime total.
+  bool   dropping       = 8; // agent's rolling verdict: dropped within the last few
+                             // windows (hysteresis). Drives the "losing" badge, so it
+                             // recovers after a clean run rather than latching on
+                             // `dropped` (cumulative) for the agent's whole life.
 }
 
 message AgentTelemetry {
