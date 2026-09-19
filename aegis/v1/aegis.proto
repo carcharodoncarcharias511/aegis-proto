@@ -814,6 +814,10 @@ message MqQueueStat {
   repeated MqOpStat   ops         = 4;  // bounded top-N + "other"
   double              ops_per_sec = 5;  // agent-computed rate for this queue, this window
   repeated MqMsgMarker markers    = 6;  // bounded produce/consume id samples for CP-side dwell join
+  bool                tls         = 7;  // OBSERVED transport of the broker connection
+                                        // (decrypted via TLS uprobe). Descriptive, a
+                                        // separate plane from health; the CP carries it
+                                        // onto the synthetic producer/consumer MQ edges.
 }
 
 // Message-queue metrics for one peer edge (pod → broker endpoint), this window.
