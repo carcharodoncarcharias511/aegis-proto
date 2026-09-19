@@ -213,6 +213,12 @@ message ServiceEdge {
   // per-queue nodes and producer/consumer edges, replacing the raw endpoint edge
   // in the graph. Unset = no broker traffic observed. See MqStats.
   MqStats mq = 23;
+
+  // Descriptive transport attribute — a SEPARATE PLANE from edge health, never a
+  // severity signal: true when any connection on this edge was observed to be TLS
+  // (its plaintext captured via a crypto-lib uprobe). The app renders it as a
+  // closed/open padlock on the edge. Unset/false = plaintext or not yet observed.
+  bool tls = 24;
 }
 
 // One endpoint's view of an edge's connection health. Failure ratio is the
