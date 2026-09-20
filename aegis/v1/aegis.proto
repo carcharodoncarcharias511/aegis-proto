@@ -668,6 +668,9 @@ enum DbProtocol {
   DB_POSTGRES             = 2;  // reserved — not emitted yet
   DB_MYSQL                = 3;  // reserved — not emitted yet
   DB_MONGODB              = 4;  // reserved — not emitted yet
+  DB_ELASTICSEARCH        = 5;  // HTTP/JSON REST (9200) — the first HTTP-based
+                                // datastore: recognized in the kernel HTTP path
+                                // (port-gated), op = method + _action.
 }
 
 // Per-operation datastore tallies for one peer edge, this window — the basis
