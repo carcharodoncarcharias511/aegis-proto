@@ -219,6 +219,14 @@ message ServiceEdge {
   // (its plaintext captured via a crypto-lib uprobe). The app renders it as a
   // closed/open padlock on the edge. Unset/false = plaintext or not yet observed.
   bool tls = 24;
+
+  // Agent payload-recognized datastore protocol id for this edge's peer
+  // (registry: 1=redis, 2=postgres, 3=mysql, 4=mongodb, 5=elasticsearch; 0=none).
+  // The agent recognizes the DB from the wire payload per-connection, which is
+  // accurate on non-standard/shared ports where the destination port is not a
+  // reliable signal. The CP prefers this over its dst-port heuristic (portType)
+  // when classifying the edge peer_type, and falls back to the port only when 0.
+  uint32 db_proto = 25;
 }
 
 // One endpoint's view of an edge's connection health. Failure ratio is the
