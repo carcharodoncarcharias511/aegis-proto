@@ -121,8 +121,26 @@ message MapStat {
                              // `dropped` (cumulative) for the agent's whole life.
 }
 
+// A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
+// specific datastore/message-queue by its unequivocal wire signature is now carrying
+// traffic that CONTRADICTS that fingerprint (e.g. an edge confirmed Elasticsearch by
+// the X-elastic-product response header later serving responses without it). This is
+// a bug/anomaly — a single IP fronting mixed backends, a proxy, or a misclassification
+// — and is surfaced as a big red alert on the Health tab. Node-scoped (rides the
+// heartbeat) but carries the edge identity so the UI can name the offending connection.
+message ProtocolMismatch {
+  string src_ip         = 1;  // local (client) IP, the pod side of the edge
+  string dst_ip         = 2;  // peer (server) IP that was fingerprinted
+  uint32 expected_proto = 3;  // DbProtocol the edge was confirmed as (see DbProtocol enum)
+  uint64 count          = 4;  // violating messages observed on this edge
+  uint64 last_secs      = 5;  // seconds since the most recent violation (for staleness/clear)
+}
+
 message AgentTelemetry {
   repeated MapStat maps = 1;  // every eBPF map's capacity stats (full list, healthy included)
+  // Rule-3 protocol-fingerprint violations, one per offending edge (empty on a
+  // healthy node). Additive, non-breaking on v1.
+  repeated ProtocolMismatch protocol_mismatches = 2;
 }
 
 // Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
