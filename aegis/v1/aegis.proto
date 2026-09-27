@@ -119,6 +119,19 @@ message MapStat {
                              // windows (hysteresis). Drives the "losing" badge, so it
                              // recovers after a clean run rather than latching on
                              // `dropped` (cumulative) for the agent's whole life.
+  // Process-capture ring ONLY (name = "PROCESS"): the accurate per-event-TYPE write-
+  // side split from PROC_STATS, so the Health card can show exec vs exit INSERT
+  // failures separately instead of one aggregate `dropped`. `gate_*` counts events the
+  // in-kernel workload gate (DENY_CGROUPS) suppressed BEFORE the ring. All zero for
+  // every other map. Additive, non-breaking on v1.
+  uint64 exec_queued         = 9;  // EXEC events written to the ring (cumulative)
+  uint64 exit_queued         = 10; // EXIT events written to the ring (cumulative)
+  uint64 exec_dropped        = 11; // EXEC events dropped by a full ring at the source (cumulative)
+  uint64 exit_dropped        = 12; // EXIT events dropped by a full ring at the source (cumulative)
+  uint64 exec_dropped_window = 13; // EXEC drops in the last report window
+  uint64 exit_dropped_window = 14; // EXIT drops in the last report window
+  uint64 gate_dropped        = 15; // events suppressed before the ring by the workload gate (cumulative)
+  uint64 gate_dropped_window = 16; // gate suppressions in the last report window
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
