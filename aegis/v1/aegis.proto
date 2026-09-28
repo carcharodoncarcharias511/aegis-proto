@@ -806,6 +806,11 @@ enum MqSystem {
   MQ_SYSTEM_UNSPECIFIED = 0;
   MQ_SQS                = 1;  // AWS SQS
   MQ_PUBSUB             = 2;  // GCP Pub/Sub
+  MQ_REDIS              = 3;  // Redis used as a queue (lists LPUSH/BRPOP, streams
+                             // XADD/XREAD, pub/sub). Classified per endpoint from the
+                             // wire commands; a redis endpoint used as a CACHE is a
+                             // datastore (DbStats), never MqStats. Stream entry-id is the
+                             // native msg_id for dwell; list-queues carry no id (no dwell).
   // MQ_KAFKA, MQ_RABBITMQ later
 }
 
