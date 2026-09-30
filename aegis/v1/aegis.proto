@@ -694,6 +694,16 @@ message PerPeerHealth {
   // the per-queue breakdown; the CP explodes it into per-queue graph nodes. See
   // MqStats. (Same unset-when-absent contract as l7/db.)
   MqStats mq                   = 20;
+
+  // Endpoint backing identity — set ONLY when this peer is an in-cluster Service
+  // (the app dialed a ClusterIP, e.g. an HA-proxy fronting a datastore/broker).
+  // The agent resolves that ClusterIP -> Service -> the workload the Service
+  // selects (the proxy layer), and reports it here. Lets the CP anchor the logical
+  // datastore/queue node to a real workload and walk to the backends behind it,
+  // instead of leaving the endpoint a raw ClusterIP. Empty for a direct pod peer
+  // or an external peer. peer_name carries the resolved Service name in this case.
+  string peer_backing_owner_kind = 21; // workload kind the Service selects (any kind)
+  string peer_backing_owner_name = 22; // that workload's name
 }
 
 // Datastore wire protocols the agent can parse. The contract is deliberately
