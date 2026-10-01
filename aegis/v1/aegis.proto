@@ -132,6 +132,17 @@ message MapStat {
   uint64 exit_dropped_window = 14; // EXIT drops in the last report window
   uint64 gate_dropped        = 15; // events suppressed before the ring by the workload gate (cumulative)
   uint64 gate_dropped_window = 16; // gate suppressions in the last report window
+  // Process-capture USERSPACE live-path drops (name = "PROCESS"): an exec event that
+  // left the ring but could not be resolved to a pod when userspace processed it.
+  // exec_unresolved = pid/cgroup not yet in cache (short-lived process gone before
+  // /proc could be read, or uid not cached yet) — transient churn, expected under high
+  // pod turnover. exec_resolve_fail = a real resolution failure (cgroup read but not a
+  // resolvable kubepods workload). Distinct from the in-kernel exec_dropped (ring full)
+  // above. Additive, non-breaking on v1.
+  uint64 exec_unresolved          = 17; // exec events dropped: pid/cgroup not in cache (cumulative)
+  uint64 exec_unresolved_window   = 18; // exec_unresolved in the last report window
+  uint64 exec_resolve_fail        = 19; // exec events dropped: resolution failed (cumulative)
+  uint64 exec_resolve_fail_window = 20; // exec_resolve_fail in the last report window
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
