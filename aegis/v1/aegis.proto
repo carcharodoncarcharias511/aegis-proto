@@ -132,6 +132,11 @@ message MapStat {
   uint64 exit_dropped_window = 14; // EXIT drops in the last report window
   uint64 gate_dropped        = 15; // events suppressed before the ring by the workload gate (cumulative)
   uint64 gate_dropped_window = 16; // gate suppressions in the last report window
+  // 17-20 were userspace exec-resolution drop counters (exec_unresolved/_window,
+  // exec_resolve_fail/_window); removed when the process gate moved to a kernel-side
+  // allow-list, which makes those userspace drops obsolete. Reserved so the numbers
+  // are never reused.
+  reserved 17, 18, 19, 20;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
