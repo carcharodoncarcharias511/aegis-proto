@@ -137,6 +137,14 @@ message MapStat {
   // allow-list, which makes those userspace drops obsolete. Reserved so the numbers
   // are never reused.
   reserved 17, 18, 19, 20;
+  // Capture-ring emit outcome, per ring (name = "MQ_CAPTURE" / "DB_CAPTURE" only; zero
+  // for every other map). Sourced from four dedicated kernel counters written only in
+  // emit_l7_capture: `success` = emits that reached the ring (crossed into userspace),
+  // `error` = emits that FAILED because the ring was full at the source. The app shows
+  // both plus a computed success% = success / (success + error). These are distinct
+  // from `dropped` above (kept for the generic loss figure/rate). Additive, v1-safe.
+  uint64 success = 21;
+  uint64 error   = 22;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
