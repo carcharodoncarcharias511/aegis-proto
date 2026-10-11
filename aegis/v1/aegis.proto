@@ -174,8 +174,8 @@ message AgentTelemetry {
 // AEGIS_CP_HEARTBEAT_TIMEOUT_SECS (default 30).
 message Heartbeat {
   google.protobuf.Timestamp timestamp    = 1;
-  int32                     process_count = 2;  // current tracked process count
-  uint64                    uptime_secs  = 3;   // agent uptime in seconds
+  reserved 2;  // was process_count — removed (agent's tracked-process count, not a node stat)
+  uint64                    uptime_secs  = 3;   // NODE uptime in seconds (read from /proc/uptime)
   int32                     buffer_used = 4;
   int32                     buffer_cap  = 5;
   AgentTelemetry            telemetry   = 6;  // eBPF-map capacity health (additive, non-breaking)
@@ -191,7 +191,7 @@ message StateSnapshot {
   google.protobuf.Timestamp  captured_at   = 1;
   repeated ServiceEdge       service_map   = 2;
   repeated PodSignals        signals       = 3;
-  int32                      process_count = 4;
+  reserved 4;  // was process_count — removed (not a useful node stat)
   repeated string         namespaces  = 5;
   repeated WorkloadStatus workloads   = 6;
 }
