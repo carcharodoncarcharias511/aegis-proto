@@ -955,6 +955,15 @@ message ContainerTasks {
   uint32 processes = 2;  // lines in cgroup.procs
   uint32 threads   = 3;  // lines in cgroup.threads
   bool   sandbox   = 4;  // true = the pod sandbox (pause) container, not in the pod status
+  // One entry per process in the container (cgroup.procs), with its own thread count.
+  repeated ProcessThreads process_threads = 5;
+}
+
+// One process in a container and its thread count.
+message ProcessThreads {
+  uint32 pid     = 1;  // PID inside the container's PID namespace (as `kubectl exec` sees it)
+  string name    = 2;  // /proc/<pid>/comm
+  uint32 threads = 3;  // /proc/<pid>/status Threads
 }
 
 // Incremental signal event — sent on combined-state change, any per-dimension
