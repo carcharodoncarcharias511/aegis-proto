@@ -936,12 +936,25 @@ message PodSignals {
   // limit. Lets the control plane build the remediation recommendation without
   // reading the kube API.
   repeated ContainerCpu containers = 16;
+
+  // Per-container process and thread counts, one entry per container cgroup under
+  // the pod's cgroup (the pod sandbox / pause container included). Read from each
+  // container cgroup's cgroup.procs and cgroup.threads.
+  repeated ContainerTasks container_tasks = 19;
 }
 
 // One container's CPU limit, as set on the pod spec (resources.limits.cpu).
 message ContainerCpu {
   string name                 = 1;
   uint32 cpu_limit_millicores = 2;  // 0 = no limit set (nothing to raise)
+}
+
+// One container cgroup's process and thread counts.
+message ContainerTasks {
+  string name      = 1;  // container name from the pod status; empty for the sandbox
+  uint32 processes = 2;  // lines in cgroup.procs
+  uint32 threads   = 3;  // lines in cgroup.threads
+  bool   sandbox   = 4;  // true = the pod sandbox (pause) container, not in the pod status
 }
 
 // Incremental signal event — sent on combined-state change, any per-dimension
