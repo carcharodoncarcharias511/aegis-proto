@@ -941,6 +941,37 @@ message PodSignals {
   // the pod's cgroup (the pod sandbox / pause container included). Read from each
   // container cgroup's cgroup.procs and cgroup.threads.
   repeated ContainerTasks container_tasks = 19;
+
+  // Per-container lifecycle: restarts, how the last run ended, the liveness probe
+  // spec, the memory limit, and kubelet liveness kills. Lets the control plane tell
+  // a pod that keeps dying (CRASH_LOOP) and WHY it died from one that is merely slow.
+  repeated ContainerLifecycle container_lifecycle = 20;
+}
+
+// One container's lifecycle, from the pod spec + status (pod watcher) and the
+// kubelet's Killing events (event watcher).
+message ContainerLifecycle {
+  string name           = 1;
+  uint32 restart_count  = 2;  // status.containerStatuses[].restartCount
+  string last_reason    = 3;  // lastState.terminated.reason: OOMKilled, Error, Completed, …
+  int32  last_exit_code = 4;  // lastState.terminated.exitCode
+  google.protobuf.Timestamp last_finished_at = 5;  // lastState.terminated.finishedAt
+  Probe  liveness       = 6;  // spec liveness probe; unset when the container has none
+  uint64 memory_limit_bytes = 7;  // spec resources.limits.memory; 0 = no limit
+  // Kubelet "Container X failed liveness probe, will be restarted" (reason Killing)
+  // events seen for this container since the agent started watching.
+  uint32 liveness_kills = 8;
+  google.protobuf.Timestamp last_liveness_kill_at = 9;
+}
+
+// A container probe as declared on the pod spec.
+message Probe {
+  string kind              = 1;  // "http", "tcp", "grpc" or "exec"
+  string path              = 2;  // httpGet.path (http only)
+  string port              = 3;  // port number or name; empty for exec
+  uint32 timeout_secs      = 4;  // timeoutSeconds (Kubernetes default 1)
+  uint32 period_secs       = 5;  // periodSeconds (default 10)
+  uint32 failure_threshold = 6;  // failureThreshold (default 3)
 }
 
 // One container's CPU limit, as set on the pod spec (resources.limits.cpu).
