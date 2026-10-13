@@ -174,8 +174,8 @@ message AgentTelemetry {
 // AEGIS_CP_HEARTBEAT_TIMEOUT_SECS (default 30).
 message Heartbeat {
   google.protobuf.Timestamp timestamp    = 1;
-  int32                     process_count = 2;  // current tracked process count
-  uint64                    uptime_secs  = 3;   // agent uptime in seconds
+  reserved 2;  // was process_count — removed (agent's tracked-process count, not a node stat)
+  uint64                    uptime_secs  = 3;   // NODE uptime in seconds (read from /proc/uptime)
   int32                     buffer_used = 4;
   int32                     buffer_cap  = 5;
   AgentTelemetry            telemetry   = 6;  // eBPF-map capacity health (additive, non-breaking)
@@ -191,7 +191,7 @@ message StateSnapshot {
   google.protobuf.Timestamp  captured_at   = 1;
   repeated ServiceEdge       service_map   = 2;
   repeated PodSignals        signals       = 3;
-  int32                      process_count = 4;
+  reserved 4;  // was process_count — removed (not a useful node stat)
   repeated string         namespaces  = 5;
   repeated WorkloadStatus workloads   = 6;
 }
@@ -936,12 +936,34 @@ message PodSignals {
   // limit. Lets the control plane build the remediation recommendation without
   // reading the kube API.
   repeated ContainerCpu containers = 16;
+
+  // Per-container process and thread counts, one entry per container cgroup under
+  // the pod's cgroup (the pod sandbox / pause container included). Read from each
+  // container cgroup's cgroup.procs and cgroup.threads.
+  repeated ContainerTasks container_tasks = 19;
 }
 
 // One container's CPU limit, as set on the pod spec (resources.limits.cpu).
 message ContainerCpu {
   string name                 = 1;
   uint32 cpu_limit_millicores = 2;  // 0 = no limit set (nothing to raise)
+}
+
+// One container cgroup's process and thread counts.
+message ContainerTasks {
+  string name      = 1;  // container name from the pod status; empty for the sandbox
+  uint32 processes = 2;  // lines in cgroup.procs
+  uint32 threads   = 3;  // lines in cgroup.threads
+  bool   sandbox   = 4;  // true = the pod sandbox (pause) container, not in the pod status
+  // One entry per process in the container (cgroup.procs), with its own thread count.
+  repeated ProcessThreads process_threads = 5;
+}
+
+// One process in a container and its thread count.
+message ProcessThreads {
+  uint32 pid     = 1;  // PID inside the container's PID namespace (as `kubectl exec` sees it)
+  string name    = 2;  // /proc/<pid>/comm
+  uint32 threads = 3;  // /proc/<pid>/status Threads
 }
 
 // Incremental signal event — sent on combined-state change, any per-dimension
