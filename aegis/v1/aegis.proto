@@ -942,8 +942,9 @@ message PodSignals {
   // container cgroup's cgroup.procs and cgroup.threads.
   repeated ContainerTasks container_tasks = 19;
 
-  // Per-container lifecycle: restarts, how the last run ended, the liveness probe
-  // spec, the memory limit, and kubelet liveness kills. Lets the control plane tell
+  // Per-container lifecycle: restarts, how the last run ended, the liveness and
+  // startup probe specs, the memory limit, kubelet probe kills, and the recent
+  // restart records. Lets the control plane tell
   // a pod that keeps dying (CRASH_LOOP) and WHY it died from one that is merely slow.
   repeated ContainerLifecycle container_lifecycle = 20;
 }
@@ -962,6 +963,20 @@ message ContainerLifecycle {
   // events seen for this container since the agent started watching.
   uint32 liveness_kills = 8;
   google.protobuf.Timestamp last_liveness_kill_at = 9;
+  Probe  startup        = 10; // spec startup probe; unset when the container has none
+  // The container's most recent restarts as the agent saw them, oldest first,
+  // bounded (the agent keeps the last 20). Sent in full on every report, so a
+  // control plane that was unreachable still receives each restart's own reason.
+  repeated RestartRecord restarts = 11;
+}
+
+// One container restart: how that run ended (lastState.terminated at the time
+// the agent saw it) and the kubelet probe kill that lines up with it, if any.
+message RestartRecord {
+  google.protobuf.Timestamp finished_at = 1;  // lastState.terminated.finishedAt — the record's identity
+  string reason      = 2;  // OOMKilled, Error, Completed, …
+  int32  exit_code   = 3;
+  string kill_source = 4;  // "liveness" or "startup" (kubelet probe kill), "" = none
 }
 
 // A container probe as declared on the pod spec.
