@@ -145,6 +145,16 @@ message MapStat {
   // from `dropped` above (kept for the generic loss figure/rate). Additive, v1-safe.
   uint64 success = 21;
   uint64 error   = 22;
+  // Capture-ring READ outcome, userspace side (name = "MQ_CAPTURE" only; zero for every
+  // other map): `read_success` = times the ring fd's readiness wait returned the ring
+  // ready, `read_error` = times that wait failed. Cumulative. Additive, v1-safe.
+  uint64 read_success = 23;
+  uint64 read_error   = 24;
+  // MQ ring record HANDOFF to the userspace parse worker (name = "MQ_CAPTURE" only;
+  // zero for every other map): `send_success` = records queued to the worker,
+  // `send_error` = records dropped because the worker queue was full. Cumulative.
+  uint64 send_success = 25;
+  uint64 send_error   = 26;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
