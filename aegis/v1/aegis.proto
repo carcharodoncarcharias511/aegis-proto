@@ -162,11 +162,31 @@ message ProtocolMismatch {
   uint64 last_secs      = 5;  // seconds since the most recent violation (for staleness/clear)
 }
 
+// How this node's Kafka client writes line up with Kafka requests (agent, cumulative
+// since agent start). A request is framed by its own 4-byte length field; these count
+// how the WRITE that starts a request compares to that length, plus writes that carry
+// only the rest of a request split across writes. Measurement only. Additive, v1-safe.
+message KafkaFraming {
+  uint64 confirmed  = 1;  // writes that start a confirmed Kafka request
+  uint64 len_match  = 2;  // write length == request length (one write, one request)
+  uint64 len_split  = 3;  // write shorter: the request continues in later writes
+  uint64 len_packed = 4;  // write longer: more follows the request in the same write
+  uint64 len_capped = 5;  // write longer than the capture ceiling: its full length not seen
+  uint64 cont       = 6;  // writes on a known Kafka connection that do not start a request
+  uint64 rej_hdr    = 7;  // Kafka-port writes too short to read the length field
+  uint64 rej_size   = 8;  // Kafka-port writes whose length field is out of range
+  uint64 rej_apikey = 9;  // Kafka-port writes too short to read api_key
+  uint64 rej_apiver = 10; // Kafka-port writes too short to read api_version
+  uint64 rej_unsup  = 11; // Kafka-port writes whose (api_key, api_version) is unsupported
+}
+
 message AgentTelemetry {
   repeated MapStat maps = 1;  // every eBPF map's capacity stats (full list, healthy included)
   // Rule-3 protocol-fingerprint violations, one per offending edge (empty on a
   // healthy node). Additive, non-breaking on v1.
   repeated ProtocolMismatch protocol_mismatches = 2;
+  // Kafka request framing counters for this node. Additive, non-breaking on v1.
+  KafkaFraming kafka_framing = 3;
 }
 
 // Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
