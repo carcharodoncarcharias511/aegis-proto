@@ -163,6 +163,9 @@ message MapStat {
   // MQ parse worker (name = "MQ_CAPTURE" only): records dropped because neither
   // endpoint is a monitored pod. Cumulative.
   uint64 unmonitored_drop = 29;
+  // MQ parse worker (name = "MQ_CAPTURE" only): records dropped because no transport
+  // could be identified from them. Cumulative.
+  uint64 unidentified_drop = 30;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
@@ -190,12 +193,39 @@ message KafkaFraming {
   uint64 len_split  = 3;  // write shorter: the request continues in later writes
   uint64 len_packed = 4;  // write longer: more follows the request in the same write
   uint64 len_capped = 5;  // write longer than the capture ceiling: its full length not seen
-  uint64 cont       = 6;  // writes on a known Kafka connection that do not start a request
+  uint64 cont       = 6;  // writes the reassembler joined onto a request begun in an earlier write
   uint64 rej_hdr    = 7;  // Kafka-port writes too short to read the length field
   uint64 rej_size   = 8;  // Kafka-port writes whose length field is out of range
   uint64 rej_apikey = 9;  // Kafka-port writes too short to read api_key
   uint64 rej_apiver = 10; // Kafka-port writes too short to read api_version
   uint64 rej_unsup  = 11; // Kafka-port writes whose (api_key, api_version) is unsupported
+}
+
+// MQ parse-worker counters (agent, cumulative since agent start). Additive, v1-safe.
+message ParseWorker {
+  uint64 id_http1        = 1;  // identify_transport: identified HTTP/1.x
+  uint64 id_http2        = 2;  // identify_transport: identified HTTP/2
+  uint64 id_redis        = 3;  // identify_transport: identified Redis
+  uint64 id_kafka        = 4;  // identify_transport: identified Kafka
+  uint64 id_unidentified = 5;  // identify_transport: transport not identified
+  uint64 http_plain_drop = 6;  // records dropped: HTTP/1.x connection is plain REST (not ES / broker)
+  uint64 proc_http1      = 7;  // whole messages processed by the HTTP/1.x handler
+  uint64 proc_http2      = 8;  // whole messages (h2 frames) processed by the HTTP/2 handler
+  uint64 proc_redis      = 9;  // whole messages processed by the Redis handler
+  uint64 proc_kafka      = 10; // whole messages processed by the Kafka handler
+  uint64 http1_req_no_line = 11; // error: an HTTP/1.x request message without a request line
+}
+
+// ES request parse errors (agent es_op_from_request, cumulative since agent start).
+// Additive, v1-safe.
+message EsParse {
+  uint64 req_bad_method = 1; // request method is not an ES method
+  uint64 req_bad_path   = 2; // request path does not start with '/'
+  uint64 req_not_utf8   = 3; // request line is not UTF-8
+  uint64 req_no_path    = 4; // request line has no path
+  uint64 edge_host_clear = 5; // ES aggregator: the per-edge endpoint-host map hit its cap and was cleared wholesale
+  uint64 resp_bad_status = 6; // response head whose status code cannot be read
+  uint64 resp_not_http   = 7; // response does not start with "HTTP/"
 }
 
 message AgentTelemetry {
@@ -205,6 +235,10 @@ message AgentTelemetry {
   repeated ProtocolMismatch protocol_mismatches = 2;
   // Kafka request framing counters for this node. Additive, non-breaking on v1.
   KafkaFraming kafka_framing = 3;
+  // MQ parse-worker counters for this node. Additive, non-breaking on v1.
+  ParseWorker parse_worker = 4;
+  // ES request parse errors for this node. Additive, non-breaking on v1.
+  EsParse es_parse = 5;
 }
 
 // Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
