@@ -150,16 +150,10 @@ message MapStat {
   // ready, `read_error` = times that wait failed. Cumulative. Additive, v1-safe.
   uint64 read_success = 23;
   uint64 read_error   = 24;
-  // MQ ring record HANDOFF to the userspace parse worker (name = "MQ_CAPTURE" only;
-  // zero for every other map): `send_success` = records queued to the worker,
-  // `send_error` = records dropped because the worker queue was full. Cumulative.
-  uint64 send_success = 25;
-  uint64 send_error   = 26;
-  // MQ parse worker RECEIVE from the drain (name = "MQ_CAPTURE" only): `recv_success`
-  // = records received, `recv_error` = the receive returned nothing because the drain
-  // is gone (MQ capture stopped). Cumulative.
-  uint64 recv_success = 27;
-  uint64 recv_error   = 28;
+  // 25-28 were the MQ ring drain→parse-worker handoff counters (send_success/_error,
+  // recv_success/_error); removed when the worker hop was removed and records are
+  // processed inline in the drain. Reserved so the numbers are never reused.
+  reserved 25, 26, 27, 28;
   // MQ parse worker (name = "MQ_CAPTURE" only): records dropped because neither
   // endpoint is a monitored pod. Cumulative.
   uint64 unmonitored_drop = 29;
