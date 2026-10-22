@@ -132,11 +132,10 @@ message MapStat {
   uint64 exit_dropped_window = 14; // EXIT drops in the last report window
   uint64 gate_dropped        = 15; // events suppressed before the ring by the workload gate (cumulative)
   uint64 gate_dropped_window = 16; // gate suppressions in the last report window
-  // 17-20 were userspace exec-resolution drop counters (exec_unresolved/_window,
-  // exec_resolve_fail/_window); removed when the process gate moved to a kernel-side
-  // allow-list, which makes those userspace drops obsolete. Reserved so the numbers
-  // are never reused.
-  reserved 17, 18, 19, 20;
+  // Capture-ring records received, userspace side (name = "MQ_CAPTURE" / "DB_CAPTURE";
+  // zero for every other map): records pulled off the ring by its consumer. Cumulative.
+  uint64 received = 17;
+  reserved 18, 19, 20;
   // Capture-ring emit outcome, per ring (name = "MQ_CAPTURE" / "DB_CAPTURE" only; zero
   // for every other map). Sourced from four dedicated kernel counters written only in
   // emit_l7_capture: `success` = emits that reached the ring (crossed into userspace),
@@ -145,20 +144,17 @@ message MapStat {
   // from `dropped` above (kept for the generic loss figure/rate). Additive, v1-safe.
   uint64 success = 21;
   uint64 error   = 22;
-  // Capture-ring READ outcome, userspace side (name = "MQ_CAPTURE" only; zero for every
-  // other map): `read_success` = times the ring fd's readiness wait returned the ring
-  // ready, `read_error` = times that wait failed. Cumulative. Additive, v1-safe.
-  uint64 read_success = 23;
-  uint64 read_error   = 24;
-  // 25-28 were the MQ ring drain→parse-worker handoff counters (send_success/_error,
-  // recv_success/_error); removed when the worker hop was removed and records are
-  // processed inline in the drain. Reserved so the numbers are never reused.
+  // Capture-ring READY outcome, userspace side (name = "MQ_CAPTURE" / "DB_CAPTURE";
+  // zero for every other map): `ready_success` = times the ring fd's wait returned the
+  // ring ready (data available), `ready_error` = times that wait failed. Cumulative.
+  uint64 ready_success = 23;
+  uint64 ready_error   = 24;
   reserved 25, 26, 27, 28;
-  // MQ parse worker (name = "MQ_CAPTURE" only): records dropped because neither
-  // endpoint is a monitored pod. Cumulative.
+  // Capture worker (name = "MQ_CAPTURE" / "DB_CAPTURE"): records dropped because
+  // neither endpoint is a monitored pod. Cumulative.
   uint64 unmonitored_drop = 29;
-  // MQ parse worker (name = "MQ_CAPTURE" only): records dropped because no transport
-  // could be identified from them. Cumulative.
+  // Capture worker (name = "MQ_CAPTURE" / "DB_CAPTURE"): records dropped because no
+  // transport could be identified from them. Cumulative.
   uint64 unidentified_drop = 30;
 }
 
