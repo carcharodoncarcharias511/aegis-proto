@@ -132,11 +132,11 @@ message MapStat {
   uint64 exit_dropped_window = 14; // EXIT drops in the last report window
   uint64 gate_dropped        = 15; // events suppressed before the ring by the workload gate (cumulative)
   uint64 gate_dropped_window = 16; // gate suppressions in the last report window
-  // Capture-ring records received, userspace side (name = "MQ_CAPTURE" / "DB_CAPTURE";
+  // Capture-ring records received, userspace side (name = "L7_CAP_n";
   // zero for every other map): records pulled off the ring by its consumer. Cumulative.
   uint64 received = 17;
   reserved 18, 19, 20;
-  // Capture-ring emit outcome, per ring (name = "MQ_CAPTURE" / "DB_CAPTURE" only; zero
+  // Capture-ring emit outcome, per ring (name = "L7_CAP_n" only; zero
   // for every other map). Sourced from four dedicated kernel counters written only in
   // emit_l7_capture: `success` = emits that reached the ring (crossed into userspace),
   // `error` = emits that FAILED because the ring was full at the source. The app shows
@@ -144,16 +144,16 @@ message MapStat {
   // from `dropped` above (kept for the generic loss figure/rate). Additive, v1-safe.
   uint64 success = 21;
   uint64 error   = 22;
-  // Capture-ring READY outcome, userspace side (name = "MQ_CAPTURE" / "DB_CAPTURE";
+  // Capture-ring READY outcome, userspace side (name = "L7_CAP_n";
   // zero for every other map): `ready_success` = times the ring fd's wait returned the
   // ring ready (data available), `ready_error` = times that wait failed. Cumulative.
   uint64 ready_success = 23;
   uint64 ready_error   = 24;
   reserved 25, 26, 27, 28;
-  // Capture worker (name = "MQ_CAPTURE" / "DB_CAPTURE"): records dropped because
+  // Capture worker (name = "L7_CAP_n"): records dropped because
   // neither endpoint is a monitored pod. Cumulative.
   uint64 unmonitored_drop = 29;
-  // Capture worker (name = "MQ_CAPTURE" / "DB_CAPTURE"): records dropped because no
+  // Capture worker (name = "L7_CAP_n"): records dropped because no
   // transport could be identified from them. Cumulative.
   uint64 unidentified_drop = 30;
 }
