@@ -967,6 +967,26 @@ message PodSignals {
   // restart records. Lets the control plane tell
   // a pod that keeps dying (CRASH_LOOP) and WHY it died from one that is merely slow.
   repeated ContainerLifecycle container_lifecycle = 20;
+
+  // GPUs this pod holds on its node, from the kubelet's pod-resources API (the
+  // devices allocated to the pod's containers for a GPU extended resource such as
+  // nvidia.com/gpu). Empty when the pod holds no GPU. The control plane draws one
+  // graph node per physical GPU (keyed by node_name + uuid) and an edge from every
+  // pod holding it.
+  repeated GpuDevice gpus = 21;
+}
+
+// One GPU held by a pod.
+message GpuDevice {
+  string uuid     = 1;  // device id from the device plugin; NVIDIA's is the GPU UUID ("GPU-…")
+  string resource = 2;  // extended resource it was allocated under, e.g. "nvidia.com/gpu"
+  // Product name from the node's nvidia.com/gpu.product label (GPU Feature
+  // Discovery), e.g. "NVIDIA-L4". "" when the node carries no such label.
+  string model    = 3;
+  // Position of this GPU among the node's allocatable devices of the same
+  // resource, ordered by device id: stable per node, and on a one-GPU node it is
+  // 0. It is NOT guaranteed to equal nvidia-smi's index on a multi-GPU node.
+  uint32 index    = 4;
 }
 
 // One container's lifecycle, from the pod spec + status (pod watcher) and the
