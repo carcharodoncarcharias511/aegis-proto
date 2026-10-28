@@ -974,6 +974,49 @@ message PodSignals {
   // graph node per physical GPU (keyed by node_name + uuid) and an edge from every
   // pod holding it.
   repeated GpuDevice gpus = 21;
+
+  // This pod's calls into the NVIDIA driver (libcuda.so) over the last window,
+  // from eBPF uprobes attributed by cgroup. Unset when the pod holds no GPU or
+  // no process in it has loaded libcuda.
+  CudaStats cuda = 22;
+
+  // Per-model stats of an inference server (NVIDIA Triton) running in this pod,
+  // from its Prometheus metrics endpoint. Empty when the pod serves none.
+  repeated InferenceModelStat inference_models = 23;
+}
+
+// One pod's NVIDIA driver calls over one window (window_ms). Counts are deltas
+// within the window, summed over every process of the pod.
+message CudaStats {
+  uint32 window_ms = 1;
+  google.protobuf.Timestamp collected_at = 2;
+  // Kernel launches: cuLaunchKernel* plus cuGraphLaunch* (one CUDA graph counts
+  // once, however many kernels it holds).
+  uint64 launches = 3;
+  // Calls that block the CPU until the GPU finishes queued work
+  // (cuStreamSynchronize, cuCtxSynchronize, cuEventSynchronize) and the total
+  // time spent blocked in them.
+  uint64 sync_calls   = 4;
+  uint64 sync_wait_ns = 5;
+  uint64 copy_to_gpu_bytes   = 6;  // cuMemcpyHtoD*
+  uint64 copy_from_gpu_bytes = 7;  // cuMemcpyDtoH*
+  // GPU memory allocations that returned CUDA_ERROR_OUT_OF_MEMORY.
+  uint64 alloc_fails = 8;
+  // Probed calls that returned any other non-success CUresult.
+  uint64 errors = 9;
+}
+
+// One model of an inference server, from its metrics endpoint.
+message InferenceModelStat {
+  string model   = 1;
+  string version = 2;
+  // Requests accepted and not yet finished (nv_inference_pending_request_count).
+  uint32 pending = 3;
+  // Over the window: requests completed (success + failure) and the total time
+  // they spent in the queue before execution (nv_inference_queue_duration_us).
+  uint32 window_ms     = 4;
+  uint64 requests      = 5;
+  uint64 queue_time_us = 6;
 }
 
 // One GPU held by a pod.
