@@ -1101,6 +1101,33 @@ message GpuDevice {
   // resource, ordered by device id: stable per node, and on a one-GPU node it is
   // 0. It is NOT guaranteed to equal nvidia-smi's index on a multi-GPU node.
   uint32 index    = 4;
+  // The card's own health from NVIDIA's management library (NVML) on its node.
+  // Unset when NVML could not be loaded there. Every pod holding the card
+  // carries the same reading.
+  GpuCardHealth health = 5;
+}
+
+// One NVML reading of a GPU card.
+message GpuCardHealth {
+  google.protobuf.Timestamp collected_at = 1;
+  uint32 temperature_c    = 2;  // GPU core temperature
+  uint32 sm_clock_mhz     = 3;  // current SM clock
+  uint32 sm_clock_max_mhz = 4;  // the card's maximum SM clock
+  // Why the card holds its clocks below maximum (NVML clocks event reasons).
+  // Idle and application-clock settings are not reported.
+  bool thermal_slowdown   = 5;  // software or hardware thermal slowdown
+  bool power_slowdown     = 6;  // software power cap or hardware power brake
+  bool hw_slowdown        = 7;  // hardware slowdown signalled to the card
+  uint64 memory_used_bytes  = 8;
+  uint64 memory_total_bytes = 9;
+  uint32 power_mw         = 10; // current board power draw
+  uint32 power_limit_mw   = 11; // enforced power limit
+  uint32 utilization_pct  = 12; // % of the last sample period a kernel was running
+  // XID errors (critical driver / hardware events) since the agent started
+  // watching the card; the last one's code and time. last_xid 0 = none seen.
+  uint64 xid_count        = 13;
+  uint32 last_xid         = 14;
+  google.protobuf.Timestamp last_xid_at = 15;
 }
 
 // One container's lifecycle, from the pod spec + status (pod watcher) and the
