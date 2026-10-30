@@ -1025,6 +1025,9 @@ message PodSignals {
   // Per-model stats of an inference server (NVIDIA Triton) running in this pod,
   // from its Prometheus metrics endpoint. Empty when the pod serves none.
   repeated InferenceModelStat inference_models = 23;
+
+  // The inference server behind inference_models; unset when the pod serves none.
+  InferenceServer inference_server = 24;
 }
 
 // One pod's NVIDIA driver calls over one window (window_ms). Counts are deltas
@@ -1059,6 +1062,32 @@ message InferenceModelStat {
   uint32 window_ms     = 4;
   uint64 requests      = 5;
   uint64 queue_time_us = 6;
+  // Over the same window: requests that failed (nv_inference_request_failure),
+  // and the total time requests spent copying input, executing, and copying
+  // output (nv_inference_compute_input/infer/output_duration_us).
+  uint64 failures          = 7;
+  uint64 compute_input_us  = 8;
+  uint64 compute_infer_us  = 9;
+  uint64 compute_output_us = 10;
+  // From the model's configuration (Triton GET /v2/models/<model>/config): its
+  // backend ("python", "vllm", "onnxruntime", …; else its platform); its queue
+  // limit (dynamic_batching.default_queue_policy.max_queue_size, 0 = no limit);
+  // its instances across all instance groups; and dynamic batching with its
+  // max_queue_delay_microseconds. Empty / zero until the config has been read.
+  string backend            = 11;
+  uint32 max_queue_size     = 12;
+  uint32 instance_count     = 13;
+  bool   dynamic_batching   = 14;
+  uint64 max_queue_delay_us = 15;
+}
+
+// The inference server a pod runs, from its metadata endpoint (Triton GET /v2).
+message InferenceServer {
+  string name    = 1;  // e.g. "triton"
+  string version = 2;  // e.g. "2.62.0"
+  // Where and how often the agent reads its per-model stats.
+  uint32 metrics_port = 3;
+  uint32 poll_secs    = 4;
 }
 
 // One GPU held by a pod.
