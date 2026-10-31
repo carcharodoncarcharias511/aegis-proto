@@ -1040,6 +1040,10 @@ message LevelReason {
   // who sent them — this pod, or its callers (total minus the pod's own).
   double         sent_by_pod     = 8;
   double         sent_by_callers = 9;
+  // RESET_ACCEPTED only: the same split on the poll whose reading crossed the
+  // threshold (fired_value) — the resets the level was set on.
+  double         fired_sent_by_pod     = 10;
+  double         fired_sent_by_callers = 11;
 }
 
 // One container's lifecycle, from the pod spec + status (pod watcher) and the
