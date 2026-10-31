@@ -1036,6 +1036,10 @@ message LevelReason {
   double         threshold   = 5;  // the threshold that was crossed
   double         fired_value = 6;  // the reading that crossed it
   double         value       = 7;  // the same reading on this poll
+  // RESET_ACCEPTED only: this poll's resets on accepted connections split by
+  // who sent them — this pod, or its callers (total minus the pod's own).
+  double         sent_by_pod     = 8;
+  double         sent_by_callers = 9;
 }
 
 // One container's lifecycle, from the pod spec + status (pod watcher) and the
