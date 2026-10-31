@@ -1009,6 +1009,15 @@ message PodSignals {
   // restart records. Lets the control plane tell
   // a pod that keeps dying (CRASH_LOOP) and WHY it died from one that is merely slow.
   repeated ContainerLifecycle container_lifecycle = 20;
+
+  // Seconds between consecutive readings in the windowed series above
+  // (cpu.window_ratios, memory.psi_window): the agent's throttle poll interval.
+  // A SignalEvent is emitted on the poll that took its newest reading, so reading
+  // i of an n-long window was taken at occurred_at - (n-1-i) * window_step_secs.
+  // Lets the control plane join the windows of successive events into one time
+  // series.
+  // 0 = not sent (older agent).
+  uint32 window_step_secs = 21;
 }
 
 // One container's lifecycle, from the pod spec + status (pod watcher) and the
