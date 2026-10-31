@@ -1018,6 +1018,24 @@ message PodSignals {
   // series.
   // 0 = not sent (older agent).
   uint32 window_step_secs = 21;
+
+  // The rule behind each dimension's current WARNING/CRITICAL level (CPU,
+  // memory, network), as judged by the agent. A dimension at STABLE has no
+  // entry. Availability's reason is availability.reason.
+  repeated LevelReason level_reasons = 22;
+}
+
+// Which reading set a dimension's level, against which threshold.
+message LevelReason {
+  DominantSignal dimension   = 1;  // CPU, MEMORY or NETWORK
+  Severity       level       = 2;  // the level this rule set
+  string         rule        = 3;  // e.g. THROTTLE, PSI, WORKING_SET, OOM_KILL, MAJFAULT,
+                                   // FD, RESET_ACCEPTED, HANDSHAKE_FAIL_ACCEPTED,
+                                   // SERVE_LATENCY, HELD, ESTABLISHED_LEAK
+  string         unit        = 4;  // unit of the values and threshold, e.g. "%", "/s", "x"
+  double         threshold   = 5;  // the threshold that was crossed
+  double         fired_value = 6;  // the reading that crossed it
+  double         value       = 7;  // the same reading on this poll
 }
 
 // One container's lifecycle, from the pod spec + status (pod watcher) and the
