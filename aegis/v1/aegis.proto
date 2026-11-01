@@ -261,6 +261,21 @@ message NodeStats {
   NodeKube    kube      = 7;
   repeated NodeGpu gpus = 8;  // one per GPU; empty when the node has none
   repeated NodePod pods = 9;  // the pods the agent monitors on this node
+  NodeAgent   agent     = 10; // the agent's own cost; unset by agents that predate it
+}
+
+// The agent's own use of its node, read from inside its own process
+// (/proc/self) and its own TCP connections. Rates cover the poll.
+message NodeAgent {
+  uint32 cpu_millicores    = 1;  // /proc/self/stat utime + stime
+  uint64 memory_bytes      = 2;  // resident set (VmRSS)
+  uint64 memory_file_bytes = 3;  // of which file-backed and shared (RssFile + RssShmem): in the node's page cache, the rest in its apps
+  double disk_read_bps     = 4;  // bytes/sec, /proc/self/io
+  double disk_write_bps    = 5;
+  double cp_tx_bps         = 6;  // bits/sec sent to the control plane (TCP payload, TLS included)
+  double cp_rx_bps         = 7;  // bits/sec received from the control plane
+  double kube_tx_bps       = 8;  // bits/sec sent to the Kubernetes API
+  double kube_rx_bps       = 9;  // bits/sec received from the Kubernetes API
 }
 
 // /proc/stat and /proc/pressure/cpu.
