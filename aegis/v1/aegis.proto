@@ -45,6 +45,7 @@ message AgentMessage {
     EndpointAdvertisement  endpoints  = 9;
     DnsObservation         dns_obs    = 10;
     WorkloadEvent          wl_event   = 11;
+    NodeStats              node_stats = 12;
   }
 }
 
@@ -241,6 +242,117 @@ message Heartbeat {
   int32                     buffer_used = 4;
   int32                     buffer_cap  = 5;
   AgentTelemetry            telemetry   = 6;  // eBPF-map capacity health (additive, non-breaking)
+}
+
+
+// ── Node resources ────────────────────────────────────────────────────────
+
+// The node's own resource readings, sent once per node poll (the agent's
+// throttle poll interval). Rates and percentages cover the interval since the
+// previous poll. Read from the host's /proc and /sys, the Kubernetes API (kube)
+// and NVML (gpus); no eBPF.
+message NodeStats {
+  google.protobuf.Timestamp sampled_at = 1;
+  uint32      step_secs = 2;  // seconds between polls
+  NodeCpu     cpu       = 3;
+  NodeMemory  memory    = 4;
+  NodeNetwork network   = 5;
+  NodeDisk    disk      = 6;
+  NodeKube    kube      = 7;
+  repeated NodeGpu gpus = 8;  // one per GPU; empty when the node has none
+  repeated NodePod pods = 9;  // the pods the agent monitors on this node
+}
+
+// /proc/stat and /proc/pressure/cpu.
+message NodeCpu {
+  uint32 cores          = 1;  // online logical CPUs
+  double busy_pct       = 2;  // % of CPU time not idle and not waiting on I/O
+  double iowait_pct     = 3;  // % of CPU time idle while waiting on I/O
+  double psi_some_avg10 = 4;  // % of time some task waited for a CPU (10 s average)
+}
+
+// /proc/meminfo, /proc/pressure/memory and /proc/vmstat. The four parts
+// (apps, kernel, page cache, free) add up to total.
+message NodeMemory {
+  uint64 total_bytes      = 1;  // MemTotal
+  uint64 free_bytes       = 2;  // MemFree
+  uint64 available_bytes  = 3;  // MemAvailable
+  uint64 page_cache_bytes = 4;  // Buffers + Cached
+  uint64 kernel_bytes     = 5;  // Slab + KernelStack + PageTables
+  uint64 apps_bytes       = 6;  // total - free - page cache - kernel
+  double psi_some_avg10   = 7;  // % of time some task waited for memory (10 s average)
+  uint64 swap_total_bytes = 8;
+  uint64 swap_used_bytes  = 9;
+  uint64 oom_kills        = 10; // vmstat oom_kill, cumulative since boot
+}
+
+// /proc/net/dev (the node's NICs: interfaces backed by a device), /proc/net/snmp
+// and the netfilter conntrack table.
+message NodeNetwork {
+  double rx_bps          = 1;  // bits/sec received
+  double tx_bps          = 2;  // bits/sec sent
+  double rx_drops_ps     = 3;  // packets/sec dropped on receive
+  double tx_drops_ps     = 4;
+  double rx_errors_ps    = 5;
+  double tx_errors_ps    = 6;
+  double tcp_retrans_pct = 7;  // TCP segments retransmitted / segments sent, %
+  uint64 conntrack_count = 8;
+  uint64 conntrack_max   = 9;  // 0 = conntrack not loaded
+  repeated string interfaces = 10;  // the NICs summed
+}
+
+// /proc/diskstats (whole disks), /proc/pressure/io and statvfs of the node's
+// filesystems.
+message NodeDisk {
+  double read_bps       = 1;  // bytes/sec
+  double write_bps      = 2;
+  double read_iops      = 3;
+  double write_iops     = 4;
+  double psi_some_avg10 = 5;  // % of time some task waited for I/O (10 s average)
+  repeated NodeFilesystem filesystems = 6;
+}
+
+message NodeFilesystem {
+  string path        = 1;  // mount point on the node, e.g. "/", "/var/lib/kubelet"
+  uint64 total_bytes = 2;
+  uint64 used_bytes  = 3;
+}
+
+// The node as Kubernetes sees it: the Node object, and the pods scheduled on it.
+message NodeKube {
+  uint32 alloc_cpu_millicores     = 1;  // status.allocatable.cpu
+  uint64 alloc_memory_bytes       = 2;  // status.allocatable.memory
+  uint32 alloc_pods               = 3;  // status.allocatable.pods
+  uint32 requested_cpu_millicores = 4;  // sum of requests of non-terminated pods here
+  uint64 requested_memory_bytes   = 5;
+  uint32 pods                     = 6;  // non-terminated pods scheduled here
+  repeated string conditions      = 7;  // pressure conditions that are True, e.g. "MemoryPressure"
+  uint32 evictions_last_hour      = 8;  // pods evicted from this node in the last hour
+  bool   ready                    = 9;  // Ready condition
+}
+
+// One GPU, from NVML.
+message NodeGpu {
+  uint32 index              = 1;
+  string uuid               = 2;
+  string name               = 3;  // e.g. "NVIDIA L4"
+  double util_pct           = 4;  // % of time a kernel was running
+  uint64 memory_used_bytes  = 5;
+  uint64 memory_total_bytes = 6;
+  uint32 temperature_c      = 7;
+  double power_watts        = 8;
+  repeated string throttle_reasons = 9;  // active clock throttle reasons, e.g. "HW_THERMAL"
+  uint64 ecc_uncorrected    = 10; // volatile uncorrected ECC errors
+}
+
+// One pod's use of the node against its requests.
+message NodePod {
+  string namespace              = 1;
+  string name                   = 2;
+  uint32 cpu_millicores         = 3;  // CPU used over the poll
+  uint32 cpu_request_millicores = 4;  // sum of container requests; 0 = none
+  uint64 memory_bytes           = 5;  // working set
+  uint64 memory_request_bytes   = 6;
 }
 
 
