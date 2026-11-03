@@ -219,6 +219,18 @@ message EsParse {
   uint64 resp_not_http   = 7; // response does not start with "HTTP/"
 }
 
+// Kafka messages handled by the agent's on_kafka (cumulative since agent start), per
+// direction: TX = requests sent (client → broker), RX = replies received (broker →
+// client). Additive, v1-safe.
+message KafkaWire {
+  uint64 tx_frames  = 1; // requests handed to on_kafka
+  uint64 rx_frames  = 2; // replies handed to on_kafka
+  uint64 tx_bytes   = 3; // bytes of those requests actually received by userspace
+  uint64 rx_bytes   = 4; // bytes of those replies actually received by userspace
+  uint64 tx_partial = 5; // requests shorter than their declared length (front only)
+  uint64 rx_partial = 6; // replies shorter than their declared length (front only)
+}
+
 message AgentTelemetry {
   repeated MapStat maps = 1;  // every eBPF map's capacity stats (full list, healthy included)
   // Rule-3 protocol-fingerprint violations, one per offending edge (empty on a
@@ -230,6 +242,8 @@ message AgentTelemetry {
   ParseWorker parse_worker = 4;
   // ES request parse errors for this node. Additive, non-breaking on v1.
   EsParse es_parse = 5;
+  // Kafka message counters for this node. Additive, non-breaking on v1.
+  KafkaWire kafka_wire = 6;
 }
 
 // Sent every AEGIS_CP_HEARTBEAT_INTERVAL_SECS (default 10).
