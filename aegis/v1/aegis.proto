@@ -229,6 +229,12 @@ message KafkaWire {
   uint64 rx_bytes   = 4; // bytes of those replies actually received by userspace
   uint64 tx_partial = 5; // requests shorter than their declared length (front only)
   uint64 rx_partial = 6; // replies shorter than their declared length (front only)
+  // Request parse errors.
+  uint64 err_api_key_range     = 7; // api_key outside the range of keys Kafka defines
+  uint64 err_api_version_range = 8; // api_version outside the accepted range
+  uint64 err_header_read       = 9; // request header ran out of bytes or held a malformed length
+  uint64 err_produce_read      = 10; // Produce body ran out of bytes or held a malformed length before the topic
+  uint64 err_fetch_read        = 11; // Fetch body ran out of bytes or held a malformed length before the topic / first partition
 }
 
 message AgentTelemetry {
