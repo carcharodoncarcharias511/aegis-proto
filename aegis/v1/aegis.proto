@@ -344,6 +344,37 @@ message NodeKube {
   repeated string conditions      = 7;  // pressure conditions that are True, e.g. "MemoryPressure"
   uint32 evictions_last_hour      = 8;  // pods evicted from this node in the last hour
   bool   ready                    = 9;  // Ready condition
+  // metadata.labels and spec.taints. Sent only when they changed since the
+  // agent last sent them; labels_set / taints_set say whether this message
+  // carries them, and the control plane keeps the last copy. Capped at 64
+  // labels and 32 taints.
+  map<string, string> labels      = 10;
+  repeated NodeTaint taints       = 11;
+  bool labels_set                 = 12;
+  bool taints_set                 = 13;
+}
+
+// One node taint (spec.taints).
+message NodeTaint {
+  string key    = 1;
+  string value  = 2;
+  string effect = 3;  // NoSchedule, PreferNoSchedule, NoExecute
+}
+
+// One pod toleration (spec.tolerations).
+message PodToleration {
+  string key      = 1;  // "" with operator Exists tolerates every taint
+  string operator = 2;  // Equal or Exists
+  string value    = 3;
+  string effect   = 4;  // "" tolerates every effect
+}
+
+// One match expression of the pod's required node affinity
+// (spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution).
+message NodeAffinityMatch {
+  string key             = 1;
+  string operator        = 2;  // In, NotIn, Exists, DoesNotExist, Gt, Lt
+  repeated string values = 3;
 }
 
 // One GPU, from NVML.
@@ -368,6 +399,15 @@ message NodePod {
   uint32 cpu_request_millicores = 4;  // sum of container requests; 0 = none
   uint64 memory_bytes           = 5;  // working set
   uint64 memory_request_bytes   = 6;
+  // Placement rules from the pod spec. Sent when the agent first reports the
+  // pod and then once a minute (placement_set says whether this message
+  // carries them); the control plane keeps the last copy. Capped at 16
+  // selector entries, 16 tolerations and 16 affinity matches.
+  map<string, string> node_selector                 = 7;
+  repeated PodToleration tolerations                = 8;
+  repeated NodeAffinityMatch required_node_affinity = 9;
+  bool spread        = 10;  // pod anti-affinity or topology spread constraints are set
+  bool placement_set = 11;
 }
 
 
