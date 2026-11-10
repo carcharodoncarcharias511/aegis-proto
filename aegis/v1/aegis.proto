@@ -242,6 +242,19 @@ message Heartbeat {
   int32                     buffer_used = 4;
   int32                     buffer_cap  = 5;
   AgentTelemetry            telemetry   = 6;  // eBPF-map capacity health (additive, non-breaking)
+  AgentRestarts             agent_restarts = 7;  // unset until the agent has seen its own pod
+}
+
+// The agent's own container, from its pod's status. restart_count starts over when
+// the pod is replaced, and only the most recent termination exists. The last_* fields
+// are unset when the container has not terminated.
+message AgentRestarts {
+  string pod_name       = 1;
+  uint32 restart_count  = 2;  // status.containerStatuses[].restartCount
+  string last_reason    = 3;  // lastState.terminated.reason: OOMKilled, Error, Completed, …
+  int32  last_exit_code = 4;  // lastState.terminated.exitCode
+  google.protobuf.Timestamp last_started_at  = 5;  // lastState.terminated.startedAt
+  google.protobuf.Timestamp last_finished_at = 6;  // lastState.terminated.finishedAt
 }
 
 
