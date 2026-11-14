@@ -167,11 +167,37 @@ message MapStat {
   // read off the ring. Additive, v1-safe.
   double produced_per_min = 32;
   double consumed_per_min = 33;
-  // DNS_CAPTURE only (zero for every other map). The fullest CPU's ring at the
-  // instant the heartbeat is built: `ring_filled_bytes` = data_head - data_tail
-  // (written, not yet read), `ring_size_bytes` = that ring's data size. Additive, v1-safe.
-  uint64 ring_filled_bytes = 34;
-  uint64 ring_size_bytes   = 35;
+  reserved 34, 35;
+  // DNS_CAPTURE only (zero for every other map): the consumer's average time to
+  // handle one record, in microseconds, over the same windows, all CPUs. Additive, v1-safe.
+  double record_time_us = 36;
+  // DNS_CAPTURE only (empty for every other map): the same figures for each CPU's
+  // ring, plus that ring's raw header values. Additive, v1-safe.
+  repeated DnsCpuStat dns_cpus = 37;
+}
+
+// One CPU's DNS_CAPTURE ring. The kernel keeps one ring per CPU.
+message DnsCpuStat {
+  uint32 cpu              = 1;
+  // Per minute over the agent's recent windows: replies the kernel tried to write
+  // into this CPU's ring (emitted + dropped), and replies its consumer read.
+  double produced_per_min = 2;
+  double consumed_per_min = 3;
+  // This CPU's consumer: average time to handle one record, microseconds.
+  double record_time_us   = 4;
+  // Cumulative since the agent started, write side: replies written into this
+  // CPU's ring, and replies that failed to be written.
+  uint64 emitted          = 5;
+  uint64 dropped          = 6;
+  // This CPU's ring header, as read: data_head (bytes the kernel has written, ever),
+  // data_tail (bytes the consumer has read, ever) and data_size (the ring's size).
+  // data_head - data_tail is the bytes waiting to be read. All zero when the agent
+  // has no ring open on this CPU.
+  uint64 data_head        = 7;
+  uint64 data_tail        = 8;
+  uint64 data_size        = 9;
+  // This CPU dropped within the agent's recent windows (the per-CPU `dropping`).
+  bool   dropping         = 10;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
