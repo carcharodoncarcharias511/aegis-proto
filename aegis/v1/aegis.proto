@@ -189,15 +189,19 @@ message DnsCpuStat {
   // CPU's ring, and replies that failed to be written.
   uint64 emitted          = 5;
   uint64 dropped          = 6;
-  // This CPU's ring header, as read: data_head (bytes the kernel has written, ever),
-  // data_tail (bytes the consumer has read, ever) and data_size (the ring's size).
-  // data_head - data_tail is the bytes waiting to be read. All zero when the agent
-  // has no ring open on this CPU.
-  uint64 data_head        = 7;
-  uint64 data_tail        = 8;
+  reserved 7, 8;
+  // This CPU's ring size in bytes (0 when the agent has no ring open on this CPU).
   uint64 data_size        = 9;
   // This CPU dropped within the agent's recent windows (the per-CPU `dropping`).
   bool   dropping         = 10;
+  // Measured by this CPU's consumer each time it wakes, before reading, over the
+  // agent's recent windows: `peak_backlog_pct` = the fullest it found the ring
+  // (data_head - data_tail, % of data_size); `wakes_low` / `wakes_mid` /
+  // `wakes_high` = wakes that found the ring under 25%, 25-75% and over 75% full.
+  double peak_backlog_pct = 11;
+  uint64 wakes_low        = 12;
+  uint64 wakes_mid        = 13;
+  uint64 wakes_high       = 14;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
