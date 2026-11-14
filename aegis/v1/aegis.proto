@@ -137,12 +137,12 @@ message MapStat {
   // zero for every other map): records pulled off the ring by its consumer. Cumulative.
   uint64 received = 17;
   reserved 18, 19, 20;
-  // Capture-ring emit outcome, per ring (name = "L7_CAP_n" only; zero
-  // for every other map). Sourced from four dedicated kernel counters written only in
-  // emit_l7_capture: `success` = emits that reached the ring (crossed into userspace),
-  // `error` = emits that FAILED because the ring was full at the source. The app shows
-  // both plus a computed success% = success / (success + error). These are distinct
-  // from `dropped` above (kept for the generic loss figure/rate). Additive, v1-safe.
+  // Ring emit outcome, write side (name = "L7_CAP_n" or "DNS_CAPTURE"; zero for
+  // every other map). Counted in the kernel at each write to the ring: `success` =
+  // writes that reached the ring, `error` = writes that FAILED because the ring was
+  // full at the source. L7_CAP_n: from emit_l7_capture's per-ring counters; the app
+  // shows both plus a computed success% = success / (success + error). DNS_CAPTURE:
+  // from DNS_STATS, the same write-side count its `dropped` carries. Additive, v1-safe.
   uint64 success = 21;
   uint64 error   = 22;
   // Capture-ring READY outcome, userspace side (name = "L7_CAP_n";
