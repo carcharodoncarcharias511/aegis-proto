@@ -157,6 +157,10 @@ message MapStat {
   // Capture worker (name = "L7_CAP_n"): records dropped because no
   // transport could be identified from them. Cumulative.
   uint64 unidentified_drop = 30;
+  // Drops per minute over the same recent windows that decide `dropping`: the drops
+  // in those windows divided by their length. Above 0 exactly when `dropping` is
+  // true. Every map. Additive, v1-safe.
+  double dropped_per_min = 31;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
