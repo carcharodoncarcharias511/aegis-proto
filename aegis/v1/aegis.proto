@@ -161,6 +161,17 @@ message MapStat {
   // in those windows divided by their length. Above 0 exactly when `dropping` is
   // true. Every map. Additive, v1-safe.
   double dropped_per_min = 31;
+  // DNS_CAPTURE only (zero for every other map). Per minute, over the same recent
+  // windows as `dropped_per_min`: `produced_per_min` = replies the kernel tried to
+  // write into the ring (emitted + dropped), `consumed_per_min` = replies the agent
+  // read off the ring. Additive, v1-safe.
+  double produced_per_min = 32;
+  double consumed_per_min = 33;
+  // DNS_CAPTURE only (zero for every other map). The fullest CPU's ring at the
+  // instant the heartbeat is built: `ring_filled_bytes` = data_head - data_tail
+  // (written, not yet read), `ring_size_bytes` = that ring's data size. Additive, v1-safe.
+  uint64 ring_filled_bytes = 34;
+  uint64 ring_size_bytes   = 35;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
