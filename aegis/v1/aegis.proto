@@ -202,6 +202,10 @@ message DnsCpuStat {
   uint64 wakes_low        = 12;
   uint64 wakes_mid        = 13;
   uint64 wakes_high       = 14;
+  // How long the backlog behind `peak_backlog_pct` took to build: at the read that
+  // found it, the age of the oldest record waiting (its kernel write time to the
+  // read), in milliseconds.
+  double peak_backlog_age_ms = 15;
 }
 
 // A protocol-fingerprint VIOLATION (agent Rule 3): an edge that was confirmed as a
