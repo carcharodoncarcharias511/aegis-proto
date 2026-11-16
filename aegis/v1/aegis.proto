@@ -1252,6 +1252,25 @@ message PodSignals {
   // memory, network), as judged by the agent. A dimension at STABLE has no
   // entry. Availability's reason is availability.reason.
   repeated LevelReason level_reasons = 22;
+
+  // GPUs this pod holds on its node, from the kubelet's pod-resources API (the
+  // devices allocated to the pod's containers for a GPU extended resource such as
+  // nvidia.com/gpu). Empty when the pod holds no GPU. The control plane draws one
+  // graph node per physical GPU (keyed by node_name + uuid) and an edge from every
+  // pod holding it.
+  repeated GpuDevice gpus = 23;
+
+  // This pod's calls into the NVIDIA driver (libcuda.so) over the last window,
+  // from eBPF uprobes attributed by cgroup. Unset when the pod holds no GPU or
+  // no process in it has loaded libcuda.
+  CudaStats cuda = 24;
+
+  // Per-model stats of an inference server (NVIDIA Triton) running in this pod,
+  // from its Prometheus metrics endpoint. Empty when the pod serves none.
+  repeated InferenceModelStat inference_models = 25;
+
+  // The inference server behind inference_models; unset when the pod serves none.
+  InferenceServer inference_server = 26;
 }
 
 // Which reading set a dimension's level, against which threshold.
@@ -1273,6 +1292,106 @@ message LevelReason {
   // threshold (fired_value) — the resets the level was set on.
   double         fired_sent_by_pod     = 10;
   double         fired_sent_by_callers = 11;
+}
+
+// One pod's NVIDIA driver calls over one window (window_ms). Counts are deltas
+// within the window, summed over every process of the pod.
+message CudaStats {
+  uint32 window_ms = 1;
+  google.protobuf.Timestamp collected_at = 2;
+  // Kernel launches: cuLaunchKernel* plus cuGraphLaunch* (one CUDA graph counts
+  // once, however many kernels it holds).
+  uint64 launches = 3;
+  // Calls that block the CPU until the GPU finishes queued work
+  // (cuStreamSynchronize, cuCtxSynchronize, cuEventSynchronize) and the total
+  // time spent blocked in them.
+  uint64 sync_calls   = 4;
+  uint64 sync_wait_ns = 5;
+  uint64 copy_to_gpu_bytes   = 6;  // cuMemcpyHtoD*
+  uint64 copy_from_gpu_bytes = 7;  // cuMemcpyDtoH*
+  // GPU memory allocations that returned CUDA_ERROR_OUT_OF_MEMORY.
+  uint64 alloc_fails = 8;
+  // Probed calls that returned any other non-success CUresult.
+  uint64 errors = 9;
+}
+
+// One model of an inference server, from its metrics endpoint.
+message InferenceModelStat {
+  string model   = 1;
+  string version = 2;
+  // Requests accepted and not yet finished (nv_inference_pending_request_count).
+  uint32 pending = 3;
+  // Over the window: requests completed (success + failure) and the total time
+  // they spent in the queue before execution (nv_inference_queue_duration_us).
+  uint32 window_ms     = 4;
+  uint64 requests      = 5;
+  uint64 queue_time_us = 6;
+  // Over the same window: requests that failed (nv_inference_request_failure),
+  // and the total time requests spent copying input, executing, and copying
+  // output (nv_inference_compute_input/infer/output_duration_us).
+  uint64 failures          = 7;
+  uint64 compute_input_us  = 8;
+  uint64 compute_infer_us  = 9;
+  uint64 compute_output_us = 10;
+  // From the model's configuration (Triton GET /v2/models/<model>/config): its
+  // backend ("python", "vllm", "onnxruntime", …; else its platform); its queue
+  // limit (dynamic_batching.default_queue_policy.max_queue_size, 0 = no limit);
+  // its instances across all instance groups; and dynamic batching with its
+  // max_queue_delay_microseconds. Empty / zero until the config has been read.
+  string backend            = 11;
+  uint32 max_queue_size     = 12;
+  uint32 instance_count     = 13;
+  bool   dynamic_batching   = 14;
+  uint64 max_queue_delay_us = 15;
+}
+
+// The inference server a pod runs, from its metadata endpoint (Triton GET /v2).
+message InferenceServer {
+  string name    = 1;  // e.g. "triton"
+  string version = 2;  // e.g. "2.62.0"
+  // Where and how often the agent reads its per-model stats.
+  uint32 metrics_port = 3;
+  uint32 poll_secs    = 4;
+}
+
+// One GPU held by a pod.
+message GpuDevice {
+  string uuid     = 1;  // device id from the device plugin; NVIDIA's is the GPU UUID ("GPU-…")
+  string resource = 2;  // extended resource it was allocated under, e.g. "nvidia.com/gpu"
+  // Product name from the node's nvidia.com/gpu.product label (GPU Feature
+  // Discovery), e.g. "NVIDIA-L4". "" when the node carries no such label.
+  string model    = 3;
+  // Position of this GPU among the node's allocatable devices of the same
+  // resource, ordered by device id: stable per node, and on a one-GPU node it is
+  // 0. It is NOT guaranteed to equal nvidia-smi's index on a multi-GPU node.
+  uint32 index    = 4;
+  // The card's own health from NVIDIA's management library (NVML) on its node.
+  // Unset when NVML could not be loaded there. Every pod holding the card
+  // carries the same reading.
+  GpuCardHealth health = 5;
+}
+
+// One NVML reading of a GPU card.
+message GpuCardHealth {
+  google.protobuf.Timestamp collected_at = 1;
+  uint32 temperature_c    = 2;  // GPU core temperature
+  uint32 sm_clock_mhz     = 3;  // current SM clock
+  uint32 sm_clock_max_mhz = 4;  // the card's maximum SM clock
+  // Why the card holds its clocks below maximum (NVML clocks event reasons).
+  // Idle and application-clock settings are not reported.
+  bool thermal_slowdown   = 5;  // software or hardware thermal slowdown
+  bool power_slowdown     = 6;  // software power cap or hardware power brake
+  bool hw_slowdown        = 7;  // hardware slowdown signalled to the card
+  uint64 memory_used_bytes  = 8;
+  uint64 memory_total_bytes = 9;
+  uint32 power_mw         = 10; // current board power draw
+  uint32 power_limit_mw   = 11; // enforced power limit
+  uint32 utilization_pct  = 12; // % of the last sample period a kernel was running
+  // XID errors (critical driver / hardware events) since the agent started
+  // watching the card; the last one's code and time. last_xid 0 = none seen.
+  uint64 xid_count        = 13;
+  uint32 last_xid         = 14;
+  google.protobuf.Timestamp last_xid_at = 15;
 }
 
 // One container's lifecycle, from the pod spec + status (pod watcher) and the
