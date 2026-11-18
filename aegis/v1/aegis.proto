@@ -1292,6 +1292,11 @@ message LevelReason {
   // threshold (fired_value) — the resets the level was set on.
   double         fired_sent_by_pod     = 10;
   double         fired_sent_by_callers = 11;
+  // The pod's own learned normal for this rule's reading, in the same unit
+  // (RESET_ACCEPTED: its normal share of connections ending in a reset, %).
+  // normal_learned is false until the agent has learned it.
+  double         normal         = 12;
+  bool           normal_learned = 13;
 }
 
 // One pod's NVIDIA driver calls over one window (window_ms). Counts are deltas
