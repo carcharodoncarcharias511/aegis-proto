@@ -46,6 +46,9 @@ message AgentMessage {
     DnsObservation         dns_obs    = 10;
     WorkloadEvent          wl_event   = 11;
     NodeStats              node_stats = 12;
+    RevisionEvent          rev_event  = 13;
+    ConfigChangeEvent      cfg_event  = 14;
+    ConfigObjectEvent      obj_event  = 15;
   }
 }
 
@@ -76,6 +79,12 @@ message Connect {
   string svc_cidr = 7;  // e.g. "10.43.0.0/16"
   int64  mem_total_bytes = 8;  // total node memory
   string arch            = 9;  // e.g. "aarch64"
+
+  // The agent reports releases and config changes (RevisionEvent,
+  // ConfigChangeEvent, ConfigObjectEvent). false from agents that don't.
+  bool reports_changes = 10;
+  // Secret changes are reported too (the chart's trackSecrets).
+  bool tracks_secrets  = 11;
 }
 
 // Control plane response to Connect.
@@ -1271,6 +1280,15 @@ message PodSignals {
 
   // The inference server behind inference_models; unset when the pod serves none.
   InferenceServer inference_server = 26;
+
+  // The workload revision this pod runs: the template hash of its ReplicaSet
+  // (label pod-template-hash) or ControllerRevision (label
+  // controller-revision-hash, the hash part). Matches RevisionInfo.template_hash.
+  // "" when the pod has neither label.
+  string revision_hash = 27;
+
+  // When the pod started (status.startTime). Unset when not yet known.
+  google.protobuf.Timestamp started_at = 28;
 }
 
 // Which reading set a dimension's level, against which threshold.
@@ -1504,6 +1522,114 @@ message WorkloadEvent {
   EventType                 type        = 1;
   WorkloadStatus            workload    = 2;
   google.protobuf.Timestamp occurred_at = 3;
+}
+
+// ── Releases and config changes ───────────────────────────────────────────
+
+// One revision of a workload: a Deployment's ReplicaSet, or a StatefulSet's or
+// DaemonSet's ControllerRevision.
+message RevisionInfo {
+  string namespace     = 1;
+  string workload_kind = 2;  // Deployment, StatefulSet, DaemonSet
+  string workload_name = 3;
+  // Names the revision for its whole life: the ReplicaSet's pod-template-hash
+  // label, or the ControllerRevision's controller.kubernetes.io/hash label.
+  // Pods carry the same value in PodSignals.revision_hash.
+  string template_hash = 4;
+  // Assigned by Kubernetes: the ReplicaSet's deployment.kubernetes.io/revision
+  // annotation, or the ControllerRevision's revision field. Increases with
+  // every rollout; a rollback gives an existing revision a new number.
+  int64  revision      = 5;
+  repeated ContainerImage images = 6;
+  // When the ReplicaSet or ControllerRevision was created.
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message ContainerImage {
+  string container = 1;
+  string image     = 2;  // as written in the pod template, e.g. "registry/app:1.8.3"
+}
+
+// A revision appeared, was renumbered (a rollback), or was deleted. Sent on
+// change, and for every revision when the agent's watch (re)starts.
+message RevisionEvent {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    REVISION_UPDATED       = 1;
+    REVISION_REMOVED       = 2;
+  }
+  EventType                 type        = 1;
+  RevisionInfo              revision    = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+}
+
+enum ChangeSource {
+  CHANGE_SOURCE_UNSPECIFIED = 0;
+  ROLLOUT                   = 1;  // the pod template changed between two revisions
+  RESIZE                    = 2;  // a running pod's resources changed in place
+}
+
+// One item that changed, with its value before and after; "" on a side where
+// the item did not exist.
+message ConfigItemChange {
+  string item          = 1;  // e.g. "container billing CPU limit", "container api env DB_URL"
+  string before        = 2;  // "" when the item was added
+  string after         = 3;  // "" when the item was removed
+  bool   values_hidden = 4;  // the values are not known, so before/after are empty
+}
+
+// What changed in a workload's pod template (ROLLOUT) or in one running pod's
+// resources (RESIZE).
+message ConfigChangeEvent {
+  string       namespace     = 1;
+  string       workload_kind = 2;
+  string       workload_name = 3;
+  // The pod the change applied to. "" when it applies to the whole workload.
+  string       pod           = 4;
+  ChangeSource source        = 5;
+  // ROLLOUT: the revision the change came in with. 0 for RESIZE.
+  int64        revision      = 6;
+  repeated ConfigItemChange items = 7;
+  google.protobuf.Timestamp changed_at = 8;
+}
+
+enum ConfigObjectKind {
+  CONFIG_OBJECT_KIND_UNSPECIFIED = 0;
+  CONFIG_MAP                     = 1;
+  SECRET                         = 2;
+}
+
+// One key of a ConfigMap. value is capped at 200 characters; sha256 is of the
+// whole value, so a change past the cap is still seen.
+message ConfigValue {
+  string value  = 1;
+  string sha256 = 2;
+}
+
+// Where a workload's pods use a ConfigMap or Secret.
+message ConfigObjectUse {
+  string workload_kind = 1;
+  string workload_name = 2;
+  string container     = 3;
+  string how           = 4;  // e.g. "env DB_URL", "envFrom", "volume /etc/app"
+  // The one key used (an env var from a single key). "" when every key is used
+  // (envFrom, or a volume).
+  string key           = 5;
+}
+
+// The current state of a ConfigMap or Secret that pods on the agent's node use.
+// Sent when the agent first sees it in use and whenever it changes. A Secret's
+// data is never read: data is empty for SECRET.
+message ConfigObjectEvent {
+  string           namespace        = 1;
+  ConfigObjectKind kind             = 2;
+  string           name             = 3;
+  string           resource_version = 4;
+  map<string, ConfigValue> data     = 5;  // CONFIG_MAP only
+  // The latest time in the object's managedFields: when it last changed.
+  google.protobuf.Timestamp changed_at = 6;
+  repeated ConfigObjectUse used_by  = 7;
+  bool             removed          = 8;  // the object was deleted
 }
 
 // ── Config update (control plane → agent) ────────────────────────────────
