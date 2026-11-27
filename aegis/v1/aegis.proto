@@ -347,6 +347,12 @@ message NodeAgent {
   double cp_rx_bps         = 7;  // bits/sec received from the control plane
   double kube_tx_bps       = 8;  // bits/sec sent to the Kubernetes API
   double kube_rx_bps       = 9;  // bits/sec received from the Kubernetes API
+  // Whether the peer is on this node, so its traffic never crosses the node's
+  // network card: the control plane when its address is one of the node's own;
+  // the Kubernetes API when every ready address of the default/kubernetes
+  // Endpoints is one of the node's own.
+  bool   cp_local          = 10;
+  bool   kube_local        = 11;
 }
 
 // /proc/stat and /proc/pressure/cpu.
