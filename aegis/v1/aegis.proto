@@ -1398,6 +1398,34 @@ message GpuDevice {
   // Unset when NVML could not be loaded there. Every pod holding the card
   // carries the same reading.
   GpuCardHealth health = 5;
+  // Set when the device is a MIG slice of a card (uuid "MIG-…"), unset for a
+  // whole GPU. health is then the reading of the card the slice is on.
+  GpuSlice slice = 6;
+}
+
+// A MIG slice: a fixed share of one card's compute and memory, dedicated to the
+// pod holding it. Slices on a card are isolated from each other in compute and
+// memory but share the card's heat, power, clocks and hardware faults.
+message GpuSlice {
+  string card_uuid  = 1;  // the physical card's UUID ("GPU-…")
+  uint32 card_index = 2;  // the card's NVML index on the node
+  string card_name  = 3;  // the card's product name from NVML, e.g. "NVIDIA A100-SXM4-80GB"
+  string profile    = 4;  // e.g. "3g.40gb"
+  uint32 sm_count   = 5;  // streaming multiprocessors in the slice
+  // Compute units: the slice's, the card's total (the most slices of the
+  // smallest profile it can be split into, e.g. 7 on an A100), and how many of
+  // the card's units are in a slice now.
+  uint32 compute_units      = 6;
+  uint32 card_compute_units = 7;
+  uint32 card_units_sliced  = 8;
+  uint64 memory_used_bytes  = 9;
+  uint64 memory_total_bytes = 10;
+  // Share of time the slice's SMs were busy, 0–100, from DCGM's profiling
+  // metrics (dcgm-exporter on the node); NVML reports no utilisation for a
+  // slice. sm_active_known is false when no such reading is available.
+  double sm_active_pct   = 11;
+  bool   sm_active_known = 12;
+  uint32 gpu_instance_id = 13; // MIG GPU instance id on the card
 }
 
 // One NVML reading of a GPU card.
